@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import { 
   FolderArchive, Users, Bot, LogOut, Plus, Calendar, 
-  Phone, Mail, FileText, Activity, User, MessageSquare, Send, ShieldAlert, FileDigit
+  Phone, Mail, FileText, Activity, User, MessageSquare, Send, 
+  ShieldAlert, FileDigit, Trash2, Edit, RefreshCw, X
 } from "lucide-react";
 
 function App() {
@@ -14,20 +15,23 @@ function App() {
 
   const [activeTab, setActiveTab] = useState("archive");
   const [workers, setWorkers] = useState([]);
+  const [recordsLoaded, setRecordsLoaded] = useState(false); // Estado para controlar el botón de "Cargar registros"
 
   // --- Estados del Formulario de Digitalización ---
+  const [editingWorkerId, setEditingWorkerId] = useState(null); // Almacena el ID si estamos EDITANDO
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [entryDate, setEntryDate] = useState(""); // Mapeado a birth_date
+  const [entryDate, setEntryDate] = useState("");
   const [phone, setPhone] = useState("");
-  const [workEmail, setWorkEmail] = useState(""); // Mapeado a email
-  const [workStatus, setWorkStatus] = useState("ACTIVO"); // Estado Laboral
-  const [archiveNotes, setArchiveNotes] = useState(""); // Notas físicas del expediente
+  const [workEmail, setWorkEmail] = useState("");
+  const [workStatus, setWorkStatus] = useState("ACTIVO");
+  const [archiveNotes, setArchiveNotes] = useState("");
 
   const [aiMessage, setAiMessage] = useState("");
   const [chatHistory, setChatHistory] = useState([]);
   const [aiLoading, setAiLoading] = useState(false);
 
+  // Al cargar la app, verificamos si ya hay un token guardado para autologuear
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (token) {
@@ -35,11 +39,8 @@ function App() {
     }
   }, []);
 
-  useEffect(() => {
-    if (user && activeTab === "archive") {
-      fetchWorkers();
-    }
-  }, [user, activeTab]);
+  // NOTA: Hemos eliminado el useEffect que cargaba los registros automáticamente. 
+  // Ahora solo se cargarán cuando el usuario presione el botón.
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -79,10 +80,12 @@ function App() {
     localStorage.removeItem("token");
     setUser(null);
     setWorkers([]);
+    setRecordsLoaded(false);
     setChatHistory([]);
+    handleCancelEdit();
   };
 
-  // --- Obtener Expedientes ---
+  // --- OBTENER EXPEDIENTES (Cargar registros) ---
   const fetchWorkers = async () => {
     const token = localStorage.getItem("token");
     try {
@@ -90,12 +93,13 @@ function App() {
         headers: { Authorization: `Bearer ${token}` },
       });
       setWorkers(response.data);
+      setRecordsLoaded(true); // Indica que los registros ya se cargaron
     } catch (err) {
-      console.error("Error al traer expedientes", err);
+      alert("Error al cargar los registros desde el servidor.");
     }
   };
 
-  // --- Guardar Expediente Digitalizado ---
+  // --- CREAR O EDITAR EXPEDIENTE (POST y PUT) ---
   const handleDigitalize = async (e) => {
     e.preventDefault();
     const token = localStorage.getItem("token");
@@ -103,33 +107,98 @@ function App() {
     // Guardamos el Estado Laboral y las Notas juntos en el campo medical_history
     const formattedNotes = `[ESTADO: ${workStatus}] - ${archiveNotes}`;
 
-    const newWorker = {
+    const workerData = {
       first_name: firstName,
       last_name: lastName,
-      birth_date: entryDate, // Reutilizamos birth_date para la Fecha de Ingreso
+      birth_date: entryDate,
       phone: phone,
       email: workEmail || null,
-      medical_history: formattedNotes, // Guardamos estado y notas aquí
+      medical_history: formattedNotes,
     };
 
     try {
-      await axios.post("http://localhost:8000/patients/", newWorker, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setFirstName("");
-      setLastName("");
-      setEntryDate("");
-      setPhone("");
-      setWorkEmail("");
-      setArchiveNotes("");
-      setWorkStatus("ACTIVO");
-      fetchWorkers();
-      alert("Expediente físico digitalizado y guardado con éxito.");
+      if (editingWorkerId) {
+        // --- MODO EDICIÓN (PUT) ---
+        await axios.put(`http://localhost:8000/patients/${editingWorkerId}`, workerData, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        alert("Expediente modificado con éxito.");
+        handleCancelEdit();
+      } else {
+        // --- MODO CREACIÓN (POST) ---
+        await axios.post("http://localhost:8000/patients/", workerData, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        alert("Expediente físico digitalizado y guardado.");
+        setFirstName("");
+        setLastName("");
+        setEntryDate("");
+        setPhone("");
+        setWorkEmail("");
+        setArchiveNotes("");
+        setWorkStatus("ACTIVO");
+      }
+      
+      // Si ya teníamos los registros cargados, actualizamos la vista
+      if (recordsLoaded) {
+        fetchWorkers();
+      }
     } catch (err) {
-      alert("Error al guardar en el archivo digital.");
+      alert("Error al procesar el expediente. Verifica los datos.");
     }
   };
 
+  // --- SELECCIONAR EXPEDIENTE PARA EDITAR ---
+  const handleSelectEdit = (worker) => {
+    setEditingWorkerId(worker.id);
+    setFirstName(worker.first_name);
+    setLastName(worker.last_name);
+    setEntryDate(worker.birth_date);
+    setPhone(worker.phone || "");
+    setWorkEmail(worker.email || "");
+
+    // Separamos el Estado Laboral y las notas para rellenar el formulario
+    const matches = worker.medical_history ? worker.medical_history.match(/^\[ESTADO: (.*?)\] - (.*)$/) : null;
+    if (matches) {
+      setWorkStatus(matches[1]);
+      setArchiveNotes(matches[2]);
+    } else {
+      setWorkStatus("ACTIVO");
+      setArchiveNotes(worker.medical_history || "");
+    }
+  };
+
+  // --- CANCELAR EDICIÓN ---
+  const handleCancelEdit = () => {
+    setEditingWorkerId(null);
+    setFirstName("");
+    setLastName("");
+    setEntryDate("");
+    setPhone("");
+    setWorkEmail("");
+    setWorkStatus("ACTIVO");
+    setArchiveNotes("");
+  };
+
+  // --- ELIMINAR EXPEDIENTE (DELETE) ---
+  const handleDeleteWorker = async (workerId) => {
+    const token = localStorage.getItem("token");
+    const confirmDelete = window.confirm("¿Está seguro de que desea eliminar permanentemente este expediente digital de la bóveda?");
+    
+    if (!confirmDelete) return;
+
+    try {
+      await axios.delete(`http://localhost:8000/patients/${workerId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      alert("Expediente eliminado de la base de datos.");
+      fetchWorkers(); // Actualizamos la lista
+    } catch (err) {
+      alert("Error al intentar eliminar el registro.");
+    }
+  };
+
+  // --- Lógica del Chat con IA ---
   const handleSendAiMessage = async (e) => {
     e.preventDefault();
     if (!aiMessage.trim()) return;
@@ -159,7 +228,7 @@ function App() {
     <div style={styles.appContainer}>
       
       {!user ? (
-        // === PANTALLA DE LOGIN DE ARCHIVO ===
+        // === LOGIN ===
         <div style={styles.loginWrapper}>
           <form onSubmit={handleLogin} style={styles.loginCard}>
             <div style={styles.loginHeader}>
@@ -173,27 +242,13 @@ function App() {
             {error && <div style={styles.alertError}>{error}</div>}
 
             <div style={styles.inputGroup}>
-              <label style={styles.inputLabel}>Usuario del Departamento (Email)</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                style={styles.formInput}
-                placeholder="archivo.personal@hospital.com"
-                required
-              />
+              <label style={styles.inputLabel}>Usuario de Archivo (Email)</label>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} style={styles.formInput} placeholder="archivo@hospital.com" required />
             </div>
 
             <div style={styles.inputGroup}>
               <label style={styles.inputLabel}>Clave de Acceso</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                style={styles.formInput}
-                placeholder="••••••••"
-                required
-              />
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} style={styles.formInput} placeholder="••••••••" required />
             </div>
 
             <button type="submit" style={styles.btnPrimary} disabled={loading}>
@@ -202,7 +257,7 @@ function App() {
           </form>
         </div>
       ) : (
-        // === PANEL DE CONTROL PRINCIPAL ===
+        // === DASHBOARD ===
         <div style={styles.dashboardContainer}>
           
           <header style={styles.header}>
@@ -224,19 +279,19 @@ function App() {
             </div>
           </header>
 
-          {/* Tarjetas de Estadísticas del Archivo */}
+          {/* KPIs */}
           <section style={styles.kpiGrid}>
             <div style={styles.kpiCard}>
               <div style={styles.kpiIconBox}><FileDigit size={24} color="#0d9488" /></div>
               <div>
-                <h4 style={styles.kpiValue}>{workers.length}</h4>
-                <p style={styles.kpiLabel}>Carpetas Digitalizadas</p>
+                <h4 style={styles.kpiValue}>{recordsLoaded ? workers.length : "-"}</h4>
+                <p style={styles.kpiLabel}>Expedientes Cargados</p>
               </div>
             </div>
             <div style={styles.kpiCard}>
               <div style={styles.kpiIconBox}><Bot size={24} color="#3b82f6" /></div>
               <div>
-                <h4 style={styles.kpiValue}>Groq Llama 3.1</h4>
+                <h4 style={styles.kpiValue}>Llama 3.1</h4>
                 <p style={styles.kpiLabel}>IA Analista de Archivo</p>
               </div>
             </div>
@@ -249,21 +304,15 @@ function App() {
             </div>
           </section>
 
-          {/* Selector de Pestañas */}
+          {/* Pestañas */}
           <div style={styles.tabBar}>
-            <button
-              onClick={() => setActiveTab("archive")}
-              style={{ ...styles.tabLink, borderBottom: activeTab === "archive" ? "3px solid #0d9488" : "3px solid transparent", color: activeTab === "archive" ? "#fff" : "#94a3b8" }}
-            >
+            <button onClick={() => setActiveTab("archive")} style={{ ...styles.tabLink, borderBottom: activeTab === "archive" ? "3px solid #0d9488" : "3px solid transparent", color: activeTab === "archive" ? "#fff" : "#94a3b8" }} >
               <FolderArchive size={18} style={{marginRight: "8px"}} />
               Digitalización de Carpetas
             </button>
-            <button
-              onClick={() => setActiveTab("ai")}
-              style={{ ...styles.tabLink, borderBottom: activeTab === "ai" ? "3px solid #0d9488" : "3px solid transparent", color: activeTab === "ai" ? "#fff" : "#94a3b8" }}
-            >
+            <button onClick={() => setActiveTab("ai")} style={{ ...styles.tabLink, borderBottom: activeTab === "ai" ? "3px solid #0d9488" : "3px solid transparent", color: activeTab === "ai" ? "#fff" : "#94a3b8" }} >
               <Bot size={18} style={{marginRight: "8px"}} />
-              Asistente Consultor de Archivo
+              Asistente de Archivo
             </button>
           </div>
 
@@ -271,14 +320,22 @@ function App() {
           {activeTab === "archive" && (
             <div style={styles.splitLayout}>
               
-              {/* Formulario (ADMIN) */}
+              {/* Formulario (Creación y Edición) */}
               {user.role === "ADMIN" ? (
                 <div style={styles.leftCol}>
-                  <form onSubmit={handleDigitalize} style={styles.medicalForm}>
-                    <h3 style={styles.sectionTitle}>
-                      <Plus size={18} style={{marginRight: "8px"}} />
-                      Ingreso de Carpeta Física
-                    </h3>
+                  <form onSubmit={handleDigitalize} style={{...styles.medicalForm, border: editingWorkerId ? "2px solid #0d9488" : "none"}}>
+                    
+                    <div style={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
+                      <h3 style={{...styles.sectionTitle, margin: 0, color: editingWorkerId ? "#0d9488" : "#fff"}}>
+                        {editingWorkerId ? <Edit size={18} style={{marginRight: "8px"}} /> : <Plus size={18} style={{marginRight: "8px"}} />}
+                        {editingWorkerId ? `Modificando ID: ${editingWorkerId}` : "Ingreso de Carpeta Física"}
+                      </h3>
+                      {editingWorkerId && (
+                        <button type="button" onClick={handleCancelEdit} style={styles.btnCancelEdit} title="Cancelar edición">
+                          <X size={16} />
+                        </button>
+                      )}
+                    </div>
                     
                     <div style={styles.grid2Col}>
                       <input type="text" placeholder="Nombres" value={firstName} onChange={(e) => setFirstName(e.target.value)} style={styles.formInput} required />
@@ -298,7 +355,6 @@ function App() {
 
                     <input type="email" placeholder="Correo Institucional" value={workEmail} onChange={(e) => setWorkEmail(e.target.value)} style={styles.formInput} />
 
-                    {/* Selector de Estado Laboral */}
                     <div style={styles.inputGroup}>
                       <label style={styles.inputLabel}>Estatus Laboral en el Expediente</label>
                       <select value={workStatus} onChange={(e) => setWorkStatus(e.target.value)} style={styles.formInput}>
@@ -312,10 +368,12 @@ function App() {
 
                     <div style={styles.inputWithIcon}>
                       <FileText size={16} style={{...styles.innerIcon, top: "15px"}} />
-                      <textarea placeholder="Notas sobre el estado físico de la carpeta (ej. 'Carpeta deteriorada, folios incompletos, observaciones de RRHH')..." value={archiveNotes} onChange={(e) => setArchiveNotes(e.target.value)} style={{...styles.formInput, height: "100px", paddingLeft: "35px", paddingTop: "10px"}} required />
+                      <textarea placeholder="Notas sobre el estado físico de la carpeta..." value={archiveNotes} onChange={(e) => setArchiveNotes(e.target.value)} style={{...styles.formInput, height: "100px", paddingLeft: "35px", paddingTop: "10px"}} required />
                     </div>
 
-                    <button type="submit" style={styles.btnPrimary}>Guardar en Archivo Histórico</button>
+                    <button type="submit" style={{...styles.btnPrimary, backgroundColor: editingWorkerId ? "#0f766e" : "#0d9488"}}>
+                      {editingWorkerId ? "Guardar Cambios" : "Guardar en Archivo Histórico"}
+                    </button>
                   </form>
                 </div>
               ) : (
@@ -330,13 +388,28 @@ function App() {
 
               {/* Bóveda de Archivo */}
               <div style={styles.rightCol}>
-                <h3 style={styles.sectionTitle}>Bóveda Digital (Trabajadores)</h3>
+                <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px"}}>
+                  <h3 style={{margin: 0, fontSize: "16px"}}>Bóveda Digital (Trabajadores)</h3>
+                  
+                  {/* Botón de Cargar/Actualizar */}
+                  <button onClick={fetchWorkers} style={styles.btnLoadRecords}>
+                    <RefreshCw size={14} style={{marginRight: "6px"}} />
+                    {recordsLoaded ? "Actualizar Lista" : "Cargar Expedientes"}
+                  </button>
+                </div>
+
                 <div style={styles.patientsFeed}>
-                  {workers.length === 0 ? (
+                  {!recordsLoaded ? (
+                    // Mensaje inicial antes de cargar
+                    <div style={styles.placeholderBox}>
+                      <FolderArchive size={40} color="#334155" style={{marginBottom: "10px"}} />
+                      <p style={{margin: 0, color: "#94a3b8", fontWeight: "bold"}}>Bóveda Digital Cerrada</p>
+                      <p style={{margin: "5px 0 0 0", fontSize: "12.5px", color: "#64748b", textAlign: "center"}}>Por políticas de seguridad de Talento Humano, presione el botón de arriba para desencriptar y cargar los expedientes activos.</p>
+                    </div>
+                  ) : workers.length === 0 ? (
                     <p style={{color: "#64748b", textAlign: "center", marginTop: "30px"}}>No hay expedientes digitalizados en la bóveda.</p>
                   ) : (
                     workers.map((w) => {
-                      // Intentar extraer el estado laboral y las notas guardadas
                       const matches = w.medical_history ? w.medical_history.match(/^\[ESTADO: (.*?)\] - (.*)$/) : null;
                       const status = matches ? matches[1] : "N/A";
                       const notes = matches ? matches[2] : w.medical_history;
@@ -345,17 +418,32 @@ function App() {
                         <div key={w.id} style={styles.medicalCard}>
                           <div style={styles.cardHeader}>
                             <h4 style={styles.patientName}>{w.first_name} {w.last_name}</h4>
-                            <span 
-                              style={{
-                                ...styles.patientIdBadge, 
-                                backgroundColor: status === "ACTIVO" ? "#10b981" : status === "FALLECIDO" ? "#ef4444" : "#f59e0b",
-                                color: "#fff",
-                                fontWeight: "bold"
-                              }}
-                            >
-                              {status}
-                            </span>
+                            <div style={{display: "flex", gap: "8px", alignItems: "center"}}>
+                              <span 
+                                style={{
+                                  ...styles.patientIdBadge, 
+                                  backgroundColor: status === "ACTIVO" ? "#10b981" : status === "FALLECIDO" ? "#ef4444" : "#f59e0b",
+                                  color: "#fff",
+                                  fontWeight: "bold"
+                                }}
+                              >
+                                {status}
+                              </span>
+                              
+                              {/* Botones de CRUD (Edición y Eliminación) - Solo visibles para ADMIN */}
+                              {user.role === "ADMIN" && (
+                                <div style={styles.crudActionGroup}>
+                                  <button onClick={() => handleSelectEdit(w)} style={styles.btnIconEdit} title="Editar expediente">
+                                    <Edit size={14} />
+                                  </button>
+                                  <button onClick={() => handleDeleteWorker(w.id)} style={styles.btnIconDelete} title="Eliminar expediente">
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           </div>
+                          
                           <div style={styles.cardDetails}>
                             <div style={styles.detailRow}>
                               <Calendar size={14} color="#0d9488" /> <span>Fecha Ingreso: {w.birth_date}</span>
@@ -398,7 +486,7 @@ function App() {
                   <div style={styles.chatPlaceholder}>
                     <MessageSquare size={48} color="#334155" style={{marginBottom: "15px"}} />
                     <p style={{margin: 0, fontWeight: "bold", color: "#94a3b8"}}>¿Qué duda archívistica tienes hoy?</p>
-                    <p style={{margin: "5px 0 0 0", fontSize: "13px", color: "#64748b", maxWidth: "400px", textAlign: "center"}}>Pregúntame sobre cómo archivar carpetas de jubilados, protocolos legales para trabajadores fallecidos o tiempos de retención de nóminas físicas.</p>
+                    <p style={{margin: "5px 0 0 0", fontSize: "13px", color: "#64748b", maxWidth: "400px", textAlign: "center"}}>Pregúntame sobre cómo archivar carpetas de jubilados, protocolos de expedientes o tiempos de retención de nóminas físicas.</p>
                   </div>
                 ) : (
                   chatHistory.map((msg, index) => (
@@ -432,7 +520,7 @@ function App() {
               <form onSubmit={handleSendAiMessage} style={styles.chatForm}>
                 <input
                   type="text"
-                  placeholder="Ej: ¿Cuánto tiempo se debe guardar el expediente físico de un trabajador fallecido?"
+                  placeholder="Ej: ¿Cuánto tiempo se debe guardar el expediente de un jubilado?"
                   value={aiMessage}
                   onChange={(e) => setAiMessage(e.target.value)}
                   style={styles.chatInput}
@@ -453,7 +541,7 @@ function App() {
 // === ESTILOS PREMIUM ===
 const styles = {
   appContainer: { fontFamily: "'Inter', sans-serif", backgroundColor: "#0f172a", color: "#f1f5f9", minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", padding: "20px", boxSizing: "border-box" },
-  loginWrapper: { display: "flex", alignItems: "center", justifyContent: "center", flex: 1, width: "100%", maxWidth: "420px" },
+  loginWrapper: { display: "flex", alignItems: "center", justifyContext: "center", justifyContent: "center", flex: 1, width: "100%", maxWidth: "420px" },
   loginCard: { backgroundColor: "#1e293b", padding: "40px 30px", borderRadius: "16px", width: "100%", boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.4)", display: "flex", flexDirection: "column", gap: "20px" },
   loginHeader: { textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: "10px" },
   logoIconBg: { backgroundColor: "#0f172a", padding: "12px", borderRadius: "50%", display: "flex" },
@@ -493,14 +581,18 @@ const styles = {
   leftCol: { display: "flex", flexDirection: "column" },
   rightCol: { display: "flex", flexDirection: "column" },
   sectionTitle: { margin: "0 0 15px 0", fontSize: "16px", color: "#fff", display: "flex", alignItems: "center" },
-  medicalForm: { backgroundColor: "#0f172a", padding: "20px", borderRadius: "12px", display: "flex", flexDirection: "column", gap: "12px" },
+  medicalForm: { backgroundColor: "#0f172a", padding: "20px", borderRadius: "12px", display: "flex", flexDirection: "column", gap: "12px", transition: "border 0.2s" },
   grid2Col: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" },
   inputWithIcon: { position: "relative", width: "100%" },
   innerIcon: { position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#64748b" },
   guestAlert: { backgroundColor: "#1e1b4b", border: "1px solid #312e81", padding: "20px", borderRadius: "12px", textAlign: "center", color: "#e0e7ff" },
+  btnCancelEdit: { backgroundColor: "transparent", border: "none", color: "#f43f5e", cursor: "pointer", display: "flex" },
 
   // Carpeta de Expedientes
   patientsFeed: { display: "flex", flexDirection: "column", gap: "12px", maxHeight: "440px", overflowY: "auto" },
+  placeholderBox: { display: "flex", flexDirection: "column", alignItems: "center", padding: "40px 20px", border: "1px dashed #334155", borderRadius: "12px", backgroundColor: "#0f172a" },
+  btnLoadRecords: { display: "flex", alignItems: "center", padding: "6px 12px", backgroundColor: "#0d9488", color: "#fff", border: "none", borderRadius: "6px", fontSize: "13px", fontWeight: "bold", cursor: "pointer" },
+  
   medicalCard: { backgroundColor: "#0f172a", padding: "18px", borderRadius: "12px", borderLeft: "4px solid #0d9488" },
   cardHeader: { display: "flex", justifyContext: "space-between", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" },
   patientName: { margin: 0, fontSize: "16px", color: "#fff" },
@@ -508,6 +600,11 @@ const styles = {
   cardDetails: { display: "flex", flexDirection: "column", gap: "6px" },
   detailRow: { display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", color: "#94a3b8" },
   historyBox: { backgroundColor: "#1e293b", padding: "10px", borderRadius: "6px", marginTop: "8px" },
+
+  // CRUD Actions
+  crudActionGroup: { display: "flex", gap: "4px" },
+  btnIconEdit: { padding: "4px", backgroundColor: "#334155", color: "#38bdf8", border: "none", borderRadius: "4px", cursor: "pointer", display: "flex" },
+  btnIconDelete: { padding: "4px", backgroundColor: "#334155", color: "#f43f5e", border: "none", borderRadius: "4px", cursor: "pointer", display: "flex" },
 
   // IA Chat
   aiContainer: { display: "flex", flexDirection: "column", gap: "20px" },
