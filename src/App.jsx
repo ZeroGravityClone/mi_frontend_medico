@@ -3,7 +3,7 @@ import axios from "axios";
 import { 
   FolderArchive, Users, Bot, LogOut, Plus, Calendar, 
   Phone, Mail, FileText, Activity, User, MessageSquare, Send, 
-  ShieldAlert, FileDigit, Trash2, Edit, RefreshCw, X
+  ShieldAlert, FileDigit, Trash2, Edit, RefreshCw, X, Search, Zap, MapPin, CreditCard
 } from "lucide-react";
 
 function App() {
@@ -15,12 +15,15 @@ function App() {
 
   const [activeTab, setActiveTab] = useState("archive");
   const [workers, setWorkers] = useState([]);
-  const [recordsLoaded, setRecordsLoaded] = useState(false); // Estado para controlar el botón de "Cargar registros"
+  const [recordsLoaded, setRecordsLoaded] = useState(false); 
+  const [searchQuery, setSearchQuery] = useState(""); 
 
   // --- Estados del Formulario de Digitalización ---
-  const [editingWorkerId, setEditingWorkerId] = useState(null); // Almacena el ID si estamos EDITANDO
+  const [editingWorkerId, setEditingWorkerId] = useState(null); 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [cedula, setCedula] = useState(""); // <-- NUEVO
+  const [address, setAddress] = useState(""); // <-- NUEVO
   const [entryDate, setEntryDate] = useState("");
   const [phone, setPhone] = useState("");
   const [workEmail, setWorkEmail] = useState("");
@@ -31,16 +34,12 @@ function App() {
   const [chatHistory, setChatHistory] = useState([]);
   const [aiLoading, setAiLoading] = useState(false);
 
-  // Al cargar la app, verificamos si ya hay un token guardado para autologuear
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (token) {
       fetchUserProfile(token);
     }
   }, []);
-
-  // NOTA: Hemos eliminado el useEffect que cargaba los registros automáticamente. 
-  // Ahora solo se cargarán cuando el usuario presione el botón.
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -85,7 +84,7 @@ function App() {
     handleCancelEdit();
   };
 
-  // --- OBTENER EXPEDIENTES (Cargar registros) ---
+  // --- OBTENER EXPEDIENTES ---
   const fetchWorkers = async () => {
     const token = localStorage.getItem("token");
     try {
@@ -93,23 +92,61 @@ function App() {
         headers: { Authorization: `Bearer ${token}` },
       });
       setWorkers(response.data);
-      setRecordsLoaded(true); // Indica que los registros ya se cargaron
+      setRecordsLoaded(true); 
     } catch (err) {
       alert("Error al cargar los registros desde el servidor.");
     }
   };
 
-  // --- CREAR O EDITAR EXPEDIENTE (POST y PUT) ---
+  // --- BOTÓN DE AUTOCOMPLETADO RÁPIDO ---
+  const handleAutofill = () => {
+    const nombresPrueba = ["Carlos", "María Teresa", "Pedro Luis", "Ana Isabel", "Francisco"];
+    const apellidosPrueba = ["Gómez", "Rodríguez", "Mendoza", "Silva", "Hernández"];
+    const fechasIngreso = ["2015-04-12", "1998-10-24", "2010-06-15", "2020-02-01"];
+    const estatusOptions = ["ACTIVO", "JUBILADO", "VACACIONES", "PENSIONADO"];
+    const direccionesPrueba = [
+      "Av. Principal Sabana Grande, Edif. El Sol, Apto 4B",
+      "Sector Centro, Calle Libertad, Casa Nro. 45",
+      "Urb. Las Acacias, Vereda 12, Casa 3",
+      "Av. Francisco de Miranda, Res. Avila, Piso 10"
+    ];
+    const notasPrueba = [
+      "Expediente físico completo. Caja de archivo A-12, carpeta marrón.",
+      "Expediente en transición de jubilación. Falta firma de Talento Humano.",
+      "Carpeta digitalizada parcialmente. Folios del 1 al 15 validados.",
+      "Trabajador de vacaciones. Registro de nómina digitalizado correctamente."
+    ];
+
+    const randomName = nombresPrueba[Math.floor(Math.random() * nombresPrueba.length)];
+    const randomLastName = apellidosPrueba[Math.floor(Math.random() * apellidosPrueba.length)];
+    const randomDate = fechasIngreso[Math.floor(Math.random() * fechasIngreso.length)];
+    const randomStatus = estatusOptions[Math.floor(Math.random() * estatusOptions.length)];
+    const randomNotes = notasPrueba[Math.floor(Math.random() * notasPrueba.length)];
+    const randomAddress = direccionesPrueba[Math.floor(Math.random() * direccionesPrueba.length)];
+
+    setFirstName(randomName);
+    setLastName(randomLastName);
+    setCedula("V-" + Math.floor(10000000 + Math.random() * 20000000)); // Cédula aleatoria realista
+    setAddress(randomAddress);
+    setEntryDate(randomDate);
+    setPhone("0412-555" + Math.floor(1000 + Math.random() * 9000));
+    setWorkEmail(`${randomName.toLowerCase().replace(" ", "")}.${randomLastName.toLowerCase()}@hospital.com`);
+    setWorkStatus(randomStatus);
+    setArchiveNotes(randomNotes);
+  };
+
+  // --- CREAR O EDITAR EXPEDIENTE ---
   const handleDigitalize = async (e) => {
     e.preventDefault();
     const token = localStorage.getItem("token");
 
-    // Guardamos el Estado Laboral y las Notas juntos en el campo medical_history
     const formattedNotes = `[ESTADO: ${workStatus}] - ${archiveNotes}`;
 
     const workerData = {
       first_name: firstName,
       last_name: lastName,
+      cedula: cedula,       // <-- ENVIAR AL BACKEND
+      address: address,     // <-- ENVIAR AL BACKEND
       birth_date: entryDate,
       phone: phone,
       email: workEmail || null,
@@ -118,20 +155,20 @@ function App() {
 
     try {
       if (editingWorkerId) {
-        // --- MODO EDICIÓN (PUT) ---
         await axios.put(`http://localhost:8000/patients/${editingWorkerId}`, workerData, {
           headers: { Authorization: `Bearer ${token}` },
         });
         alert("Expediente modificado con éxito.");
         handleCancelEdit();
       } else {
-        // --- MODO CREACIÓN (POST) ---
         await axios.post("http://localhost:8000/patients/", workerData, {
           headers: { Authorization: `Bearer ${token}` },
         });
         alert("Expediente físico digitalizado y guardado.");
         setFirstName("");
         setLastName("");
+        setCedula("");
+        setAddress("");
         setEntryDate("");
         setPhone("");
         setWorkEmail("");
@@ -139,25 +176,24 @@ function App() {
         setWorkStatus("ACTIVO");
       }
       
-      // Si ya teníamos los registros cargados, actualizamos la vista
       if (recordsLoaded) {
         fetchWorkers();
       }
     } catch (err) {
-      alert("Error al procesar el expediente. Verifica los datos.");
+      alert("Error al procesar el expediente: " + (err.response?.data?.detail || "Datos inválidos o cédula duplicada."));
     }
   };
 
-  // --- SELECCIONAR EXPEDIENTE PARA EDITAR ---
   const handleSelectEdit = (worker) => {
     setEditingWorkerId(worker.id);
     setFirstName(worker.first_name);
     setLastName(worker.last_name);
+    setCedula(worker.cedula || ""); // <-- ASIGNAR PARA EDITAR
+    setAddress(worker.address || ""); // <-- ASIGNAR PARA EDITAR
     setEntryDate(worker.birth_date);
     setPhone(worker.phone || "");
     setWorkEmail(worker.email || "");
 
-    // Separamos el Estado Laboral y las notas para rellenar el formulario
     const matches = worker.medical_history ? worker.medical_history.match(/^\[ESTADO: (.*?)\] - (.*)$/) : null;
     if (matches) {
       setWorkStatus(matches[1]);
@@ -168,11 +204,12 @@ function App() {
     }
   };
 
-  // --- CANCELAR EDICIÓN ---
   const handleCancelEdit = () => {
     setEditingWorkerId(null);
     setFirstName("");
     setLastName("");
+    setCedula("");
+    setAddress("");
     setEntryDate("");
     setPhone("");
     setWorkEmail("");
@@ -180,10 +217,9 @@ function App() {
     setArchiveNotes("");
   };
 
-  // --- ELIMINAR EXPEDIENTE (DELETE) ---
   const handleDeleteWorker = async (workerId) => {
     const token = localStorage.getItem("token");
-    const confirmDelete = window.confirm("¿Está seguro de que desea eliminar permanentemente este expediente digital de la bóveda?");
+    const confirmDelete = window.confirm("¿Está seguro de que desea eliminar permanentemente este expediente?");
     
     if (!confirmDelete) return;
 
@@ -192,13 +228,12 @@ function App() {
         headers: { Authorization: `Bearer ${token}` },
       });
       alert("Expediente eliminado de la base de datos.");
-      fetchWorkers(); // Actualizamos la lista
+      fetchWorkers();
     } catch (err) {
       alert("Error al intentar eliminar el registro.");
     }
   };
 
-  // --- Lógica del Chat con IA ---
   const handleSendAiMessage = async (e) => {
     e.preventDefault();
     if (!aiMessage.trim()) return;
@@ -223,6 +258,18 @@ function App() {
       setAiLoading(false);
     }
   };
+
+  // --- FILTRO INTELIGENTE EXPANDIDO (Busca también por Cédula) ---
+  const filteredWorkers = workers.filter((w) => {
+    const fullName = `${w.first_name} ${w.last_name}`.toLowerCase();
+    const query = searchQuery.toLowerCase();
+    return (
+      fullName.includes(query) ||
+      w.id.toString() === query ||
+      (w.cedula && w.cedula.toLowerCase().includes(query)) ||
+      (w.email && w.email.toLowerCase().includes(query))
+    );
+  });
 
   return (
     <div style={styles.appContainer}>
@@ -284,8 +331,8 @@ function App() {
             <div style={styles.kpiCard}>
               <div style={styles.kpiIconBox}><FileDigit size={24} color="#0d9488" /></div>
               <div>
-                <h4 style={styles.kpiValue}>{recordsLoaded ? workers.length : "-"}</h4>
-                <p style={styles.kpiLabel}>Expedientes Cargados</p>
+                <h4 style={styles.kpiValue}>{recordsLoaded ? filteredWorkers.length : "-"}</h4>
+                <p style={styles.kpiLabel}>Expedientes Visibles</p>
               </div>
             </div>
             <div style={styles.kpiCard}>
@@ -330,16 +377,31 @@ function App() {
                         {editingWorkerId ? <Edit size={18} style={{marginRight: "8px"}} /> : <Plus size={18} style={{marginRight: "8px"}} />}
                         {editingWorkerId ? `Modificando ID: ${editingWorkerId}` : "Ingreso de Carpeta Física"}
                       </h3>
-                      {editingWorkerId && (
-                        <button type="button" onClick={handleCancelEdit} style={styles.btnCancelEdit} title="Cancelar edición">
-                          <X size={16} />
-                        </button>
-                      )}
+                      
+                      <div style={{display: "flex", gap: "5px"}}>
+                        {!editingWorkerId && (
+                          <button type="button" onClick={handleAutofill} style={styles.btnAutofill} title="Rellenar con plantilla de prueba">
+                            <Zap size={14} style={{marginRight: "4px"}} />
+                            Carga Rápida
+                          </button>
+                        )}
+                        {editingWorkerId && (
+                          <button type="button" onClick={handleCancelEdit} style={styles.btnCancelEdit} title="Cancelar edición">
+                            <X size={16} />
+                          </button>
+                        )}
+                      </div>
                     </div>
                     
                     <div style={styles.grid2Col}>
                       <input type="text" placeholder="Nombres" value={firstName} onChange={(e) => setFirstName(e.target.value)} style={styles.formInput} required />
                       <input type="text" placeholder="Apellidos" value={lastName} onChange={(e) => setLastName(e.target.value)} style={styles.formInput} required />
+                    </div>
+
+                    {/* NUEVO CAMPO: CÉDULA */}
+                    <div style={styles.inputWithIcon}>
+                      <CreditCard size={16} style={styles.innerIcon} />
+                      <input type="text" placeholder="Cédula de Identidad (Ej: V-12345678)" value={cedula} onChange={(e) => setCedula(e.target.value)} style={{...styles.formInput, paddingLeft: "35px"}} required />
                     </div>
 
                     <div style={styles.grid2Col}>
@@ -354,6 +416,12 @@ function App() {
                     </div>
 
                     <input type="email" placeholder="Correo Institucional" value={workEmail} onChange={(e) => setWorkEmail(e.target.value)} style={styles.formInput} />
+
+                    {/* NUEVO CAMPO: DIRECCIÓN */}
+                    <div style={styles.inputWithIcon}>
+                      <MapPin size={16} style={styles.innerIcon} />
+                      <input type="text" placeholder="Dirección de Habitación Completa" value={address} onChange={(e) => setAddress(e.target.value)} style={{...styles.formInput, paddingLeft: "35px"}} />
+                    </div>
 
                     <div style={styles.inputGroup}>
                       <label style={styles.inputLabel}>Estatus Laboral en el Expediente</label>
@@ -388,28 +456,46 @@ function App() {
 
               {/* Bóveda de Archivo */}
               <div style={styles.rightCol}>
-                <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px"}}>
-                  <h3 style={{margin: 0, fontSize: "16px"}}>Bóveda Digital (Trabajadores)</h3>
+                
+                <div style={styles.searchHeader}>
+                  <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%"}}>
+                    <h3 style={{margin: 0, fontSize: "16px"}}>Bóveda Digital</h3>
+                    <button onClick={fetchWorkers} style={styles.btnLoadRecords}>
+                      <RefreshCw size={14} style={{marginRight: "6px"}} />
+                      {recordsLoaded ? "Sincronizar Bóveda" : "Cargar Expedientes"}
+                    </button>
+                  </div>
                   
-                  {/* Botón de Cargar/Actualizar */}
-                  <button onClick={fetchWorkers} style={styles.btnLoadRecords}>
-                    <RefreshCw size={14} style={{marginRight: "6px"}} />
-                    {recordsLoaded ? "Actualizar Lista" : "Cargar Expedientes"}
-                  </button>
+                  {recordsLoaded && (
+                    <div style={styles.searchBarWrapper}>
+                      <Search size={16} style={styles.searchIcon} />
+                      <input
+                        type="text"
+                        placeholder="Buscar por Cédula, Nombre o ID de Expediente..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        style={styles.searchInputField}
+                      />
+                      {searchQuery && (
+                        <button onClick={() => setSearchQuery("")} style={styles.btnClearSearch}>
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div style={styles.patientsFeed}>
                   {!recordsLoaded ? (
-                    // Mensaje inicial antes de cargar
                     <div style={styles.placeholderBox}>
                       <FolderArchive size={40} color="#334155" style={{marginBottom: "10px"}} />
                       <p style={{margin: 0, color: "#94a3b8", fontWeight: "bold"}}>Bóveda Digital Cerrada</p>
-                      <p style={{margin: "5px 0 0 0", fontSize: "12.5px", color: "#64748b", textAlign: "center"}}>Por políticas de seguridad de Talento Humano, presione el botón de arriba para desencriptar y cargar los expedientes activos.</p>
+                      <p style={{margin: "5px 0 0 0", fontSize: "12.5px", color: "#64748b", textAlign: "center"}}>Por políticas de seguridad, presione "Cargar Expedientes" para desencriptar y visualizar la información.</p>
                     </div>
-                  ) : workers.length === 0 ? (
-                    <p style={{color: "#64748b", textAlign: "center", marginTop: "30px"}}>No hay expedientes digitalizados en la bóveda.</p>
+                  ) : filteredWorkers.length === 0 ? (
+                    <p style={{color: "#64748b", textAlign: "center", marginTop: "30px"}}>Ningún expediente coincide con la búsqueda.</p>
                   ) : (
-                    workers.map((w) => {
+                    filteredWorkers.map((w) => {
                       const matches = w.medical_history ? w.medical_history.match(/^\[ESTADO: (.*?)\] - (.*)$/) : null;
                       const status = matches ? matches[1] : "N/A";
                       const notes = matches ? matches[2] : w.medical_history;
@@ -430,7 +516,6 @@ function App() {
                                 {status}
                               </span>
                               
-                              {/* Botones de CRUD (Edición y Eliminación) - Solo visibles para ADMIN */}
                               {user.role === "ADMIN" && (
                                 <div style={styles.crudActionGroup}>
                                   <button onClick={() => handleSelectEdit(w)} style={styles.btnIconEdit} title="Editar expediente">
@@ -445,15 +530,24 @@ function App() {
                           </div>
                           
                           <div style={styles.cardDetails}>
+                            {/* MOSTRAR CÉDULA Y DIRECCIÓN EN LA TARJETA */}
                             <div style={styles.detailRow}>
-                              <Calendar size={14} color="#0d9488" /> <span>Fecha Ingreso: {w.birth_date}</span>
+                              <CreditCard size={14} color="#0d9488" /> <span><strong>Cédula:</strong> {w.cedula || "No registrada"}</span>
                             </div>
                             <div style={styles.detailRow}>
-                              <Phone size={14} color="#0d9488" /> <span>Telf: {w.phone || "No registrado"}</span>
+                              <Calendar size={14} color="#0d9488" /> <span><strong>Fecha Ingreso:</strong> {w.birth_date}</span>
+                            </div>
+                            <div style={styles.detailRow}>
+                              <Phone size={14} color="#0d9488" /> <span><strong>Telf:</strong> {w.phone || "No registrado"}</span>
                             </div>
                             {w.email && (
                               <div style={styles.detailRow}>
-                                <Mail size={14} color="#0d9488" /> <span>{w.email}</span>
+                                <Mail size={14} color="#0d9488" /> <span><strong>Email:</strong> {w.email}</span>
+                              </div>
+                            )}
+                            {w.address && (
+                              <div style={styles.detailRow}>
+                                <MapPin size={14} color="#0d9488" /> <span><strong>Dirección:</strong> {w.address}</span>
                               </div>
                             )}
                             <div style={styles.historyBox}>
@@ -485,7 +579,7 @@ function App() {
                 {chatHistory.length === 0 ? (
                   <div style={styles.chatPlaceholder}>
                     <MessageSquare size={48} color="#334155" style={{marginBottom: "15px"}} />
-                    <p style={{margin: 0, fontWeight: "bold", color: "#94a3b8"}}>¿Qué duda archívistica tienes hoy?</p>
+                    <p style={{margin: 0, fontWeight: "bold", color: "#94a3b8"}}>¿Qué duda tienes hoy?</p>
                     <p style={{margin: "5px 0 0 0", fontSize: "13px", color: "#64748b", maxWidth: "400px", textAlign: "center"}}>Pregúntame sobre cómo archivar carpetas de jubilados, protocolos de expedientes o tiempos de retención de nóminas físicas.</p>
                   </div>
                 ) : (
@@ -587,8 +681,15 @@ const styles = {
   innerIcon: { position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#64748b" },
   guestAlert: { backgroundColor: "#1e1b4b", border: "1px solid #312e81", padding: "20px", borderRadius: "12px", textAlign: "center", color: "#e0e7ff" },
   btnCancelEdit: { backgroundColor: "transparent", border: "none", color: "#f43f5e", cursor: "pointer", display: "flex" },
+  btnAutofill: { display: "flex", alignItems: "center", padding: "4px 8px", backgroundColor: "#334155", color: "#eab308", border: "none", borderRadius: "4px", fontSize: "12px", fontWeight: "bold", cursor: "pointer" },
 
-  // Carpeta de Expedientes
+  // Bóveda de Archivo y Buscador
+  searchHeader: { display: "flex", flexDirection: "column", gap: "10px", marginBottom: "15px" },
+  searchBarWrapper: { position: "relative", width: "100%" },
+  searchIcon: { position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#64748b" },
+  searchInputField: { width: "100%", padding: "10px 35px 10px 35px", borderRadius: "8px", border: "1px solid #334155", backgroundColor: "#0f172a", color: "#fff", boxSizing: "border-box", fontSize: "13.5px", outline: "none" },
+  btnClearSearch: { position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", backgroundColor: "transparent", border: "none", color: "#64748b", cursor: "pointer" },
+
   patientsFeed: { display: "flex", flexDirection: "column", gap: "12px", maxHeight: "440px", overflowY: "auto" },
   placeholderBox: { display: "flex", flexDirection: "column", alignItems: "center", padding: "40px 20px", border: "1px dashed #334155", borderRadius: "12px", backgroundColor: "#0f172a" },
   btnLoadRecords: { display: "flex", alignItems: "center", padding: "6px 12px", backgroundColor: "#0d9488", color: "#fff", border: "none", borderRadius: "6px", fontSize: "13px", fontWeight: "bold", cursor: "pointer" },
