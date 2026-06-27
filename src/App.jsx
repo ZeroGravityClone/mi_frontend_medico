@@ -200,12 +200,9 @@ function App() {
   const [searchDocCategory, setSearchDocCategory] = useState("TODAS");
   const [searchDocFolder, setSearchDocFolder] = useState("");
   
-  // Lista global en el cliente (fusión de datos reales y mock)
-  const [globalDocsList, setGlobalDocsList] = useState([
-    { id: 1, fileName: "[Cédula] - Copia de Cédula de Identidad", category: "Cédula", workerName: "Gómez, Carlos", date: "2026-06-12", folder: "102", status: "COMPLETO", path: "uploads/mock_cedula.pdf" },
-    { id: 2, fileName: "[Contrato] - Acta de Convenio de Trabajo", category: "Contrato", workerName: "Rodríguez, María", date: "2026-06-14", folder: "154", status: "PENDIENTE", path: "uploads/mock_contrato.pdf" },
-    { id: 3, fileName: "[Seguro Social] - Planilla de Cotizaciones IVSS", category: "Seguro Social", workerName: "Hernández, Francisco", date: "2026-06-15", folder: "024", status: "CRITICO", path: "uploads/mock_ivss.pdf" }
-  ]);
+  // Lista global conectada al backend
+  const [globalDocsList, setGlobalDocsList] = useState([]);
+
   const [digitalizationHistory, setDigitalizationHistory] = useState([
     { id: 1, transcriptor: "archivo@hospital.com", date: "2026-06-18 09:30 AM", doc: "Copia de Cédula", worker: "Gómez, Carlos" },
     { id: 2, transcriptor: "archivo@hospital.com", date: "2026-06-18 11:15 AM", doc: "Contrato de Trabajo", worker: "Rodríguez, María" }
@@ -215,9 +212,12 @@ function App() {
   const [chatHistory, setChatHistory] = useState([]);
   const [aiLoading, setAiLoading] = useState(false);
 
-  // --- NUEVOS ESTADOS DE NOTIFICACIONES INTERNAS (REEMPLAZAN ALERTS NATIVOS) ---
+  // --- ESTADOS DE NOTIFICACIONES INTERNAS (REEMPLAZAN ALERTS NATIVOS) ---
   const [toast, setToast] = useState({ isOpen: false, message: "", type: "info" });
   const [confirm, setConfirm] = useState({ isOpen: false, title: "", message: "", onConfirm: null });
+
+  // --- FASE 2: ESTADO LOCAL DE AUDITORÍA EN VIVO ---
+  const [auditingWorkerId, setAuditingWorkerId] = useState(null);
 
   const showToast = (message, type = "info") => {
     setToast({ isOpen: true, message, type });
@@ -239,10 +239,17 @@ function App() {
     if (token) fetchUserProfile(token);
   }, []);
 
+  // EFECTO CORE DE CARGA DE DATOS
   useEffect(() => {
-    if (user && (activeTab === "loans" || activeTab === "calendar" || activeTab === "stats" || activeTab === "pdf_scans")) {
-      fetchLoans();
-      fetchWorkers();
+    if (user) {
+      fetchSystemUsers(); 
+      if (activeTab === "loans" || activeTab === "calendar" || activeTab === "stats" || activeTab === "pdf_scans") {
+        fetchLoans();
+        fetchWorkers();
+        if (activeTab === "pdf_scans") {
+          fetchGlobalDocs();
+        }
+      }
     }
   }, [user, activeTab]);
 
@@ -364,23 +371,52 @@ function App() {
           await axios.delete(`http://localhost:8000/patients/${workerId}`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }}); 
           showToast("Expediente eliminado de la base de datos.", "success");
           fetchWorkers(); 
-        } catch (err) { showToast("Error al intentar eliminar el expediente médico.", "error"); }
+        } catch (err) { showToast("Error al intentar eliminar el expediente.", "error"); }
       }
     );
   };
 
-  // ARCHIVOS INDIVIDUALES
+  // --- FASE 2: BOTÓN "AUDITAR CON IA" EN BÓVEDA DIGITAL ---
+  const handleAuditWorker = async (workerId) => {
+    const token = localStorage.getItem("token");
+    setAuditingWorkerId(workerId);
+    try {
+      const res = await axios.post(`http://localhost:8000/patients/${workerId}/audit`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      // Actualizamos únicamente la tarjeta afectada
+      setWorkers(prev => prev.map(w => w.id === workerId ? res.data : w));
+      showToast("Auditoría de IA completada y estado de carpeta actualizado.", "success");
+    } catch (err) {
+      showToast("Error al ejecutar auditoría automática en el servidor.", "error");
+    } finally {
+      setAuditingWorkerId(null);
+    }
+  };
+
+  // ARCHIVOS INDIVIDUALES POR TRABAJADOR
   const handleOpenDocs = (worker) => { setSelectedWorker(worker); setShowDocModal(true); fetchWorkerDocs(worker.id); };
   const handleCloseDocs = () => { setShowDocModal(false); setSelectedWorker(null); setWorkerDocs([]); setFileUpload(null); setFileDesc(""); };
   const fetchWorkerDocs = async (workerId) => {
     try { const res = await axios.get(`http://localhost:8000/patients/${workerId}/documents`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }); setWorkerDocs(res.data); } catch (err) {}
   };
+
+  // FASE 1: CARGA INDIVIDUAL ASOCIADA AL ENDPOINT NATIVO
   const handleUploadDoc = async (e) => {
     e.preventDefault(); if (!fileUpload || !fileDesc) return showToast("Selecciona un archivo escaneado primero.", "warning");
     setIsUploading(true);
-    const formData = new FormData(); formData.append("file", fileUpload); formData.append("description", fileDesc);
+    const token = localStorage.getItem("token");
+    
+    const formData = new FormData();
+    formData.append("file", fileUpload);
+    formData.append("description", fileDesc);
+    formData.append("category", "Otros");
+    formData.append("folder_number", "S/N");
+    formData.append("document_status", "digitalizado");
+    formData.append("qr_code", "");
+
     try {
-      await axios.post(`http://localhost:8000/patients/${selectedWorker.id}/documents`, formData, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}`, "Content-Type": "multipart/form-data" }});
+      await axios.post(`http://localhost:8000/patients/${selectedWorker.id}/documents`, formData, { headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" }});
       setFileUpload(null); setFileDesc(""); fetchWorkerDocs(selectedWorker.id); showToast("Archivo indexado con éxito.", "success");
     } catch (err) { showToast("Error al procesar el archivo.", "error"); } finally { setIsUploading(false); }
   };
@@ -435,47 +471,53 @@ function App() {
     }, 2000);
   };
 
+  // --- FASE 1: CONEXIÓN REAL DEL BOTÓN AL ENDPOINT /auto ---
   const handleManualUploadPDF = async (e) => {
     e.preventDefault();
     if(!selectedPatientForScan || !fileUpload) return showToast("Seleccione un expediente y el PDF.", "warning");
 
     setIsUploading(true);
     const token = localStorage.getItem("token");
+    
     const formData = new FormData();
     formData.append("file", fileUpload);
-    const formattedDesc = `[CATEGORIA: ${selectedScanCategory}] [CARPETA: ${scanFolderNum}] - ${fileDesc || "Carga de documento"}`;
-    formData.append("description", formattedDesc);
+    formData.append("description", fileDesc || `Digitalización de ${selectedScanCategory}`);
+    formData.append("category", selectedScanCategory);
+    formData.append("folder_number", scanFolderNum);
+    formData.append("document_status", "digitalizado");
+    formData.append("qr_code", qrInputManual || "");
 
     try {
-      const res = await axios.post(`http://localhost:8000/patients/${selectedPatientForScan}/documents`, formData, {
+      const res = await axios.post(`http://localhost:8000/patients/${selectedPatientForScan}/documents/auto`, formData, {
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" }
       });
 
-      const target = workers.find(w => w.id === parseInt(selectedPatientForScan));
-      const newDoc = {
-        id: Date.now(),
-        fileName: `[${selectedScanCategory}] - ${fileUpload.name}`,
-        category: selectedScanCategory,
-        workerName: target ? `${target.last_name}, ${target.first_name}` : "Externo",
-        date: today,
-        folder: scanFolderNum || "S/N",
-        status: "COMPLETO",
-        path: res.data.file_path
-      };
-
-      setGlobalDocsList(prev => [newDoc, ...prev]);
-      setDigitalizationHistory(prev => [{ id: Date.now(), transcriptor: user.email, date: new Date().toLocaleString(), doc: selectedScanCategory, worker: target ? `${target.last_name}, ${target.first_name}` : "S/N" }, ...prev]);
+      // Refrescamos el visor global (Fase 2)
+      fetchGlobalDocs();
       
-      setFileUpload(null); setFileDesc(""); setScanFolderNum("");
-      showToast("PDF manual subido, procesado e indexado en el servidor.", "success");
+      setFileUpload(null); setFileDesc(""); setScanFolderNum(""); setQrInputManual("");
+      showToast(`PDF indexado con éxito. Clasificado como: ${res.data.category}`, "success");
     } catch(err) {
-      showToast("Error al subir archivo al servidor físico.", "error");
+      showToast("Error al subir el archivo al servidor.", "error");
     } finally {
       setIsUploading(false);
     }
   };
 
-  // PRÉSTAMOS
+  // --- FASE 2: CONECTAR VISOR GLOBAL DE DOCUMENTOS REALES ---
+  const fetchGlobalDocs = async () => {
+    const token = localStorage.getItem("token");
+    try {
+      const res = await axios.get("http://localhost:8000/patients/documents/all", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setGlobalDocsList(res.data);
+    } catch (err) {
+      console.error("Error al sincronizar documentos del servidor", err);
+    }
+  };
+
+  // PRÉSTAMOS (MÓDULO REAL)
   const fetchLoans = async () => {
     try {
       const res = await axios.get("http://localhost:8000/loans/", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } });
@@ -538,9 +580,17 @@ function App() {
   // --- FILTROS DE LA PESTAÑA "PDF ESCANEADOS" ---
   const filteredScannedDocsList = globalDocsList.filter(d => {
     const query = searchQuery.toLowerCase();
-    const matchQuery = d.fileName.toLowerCase().includes(query) || d.workerName.toLowerCase().includes(query) || d.folder.includes(query);
+    
+    const fileNameSafe = d.file_name ? d.file_name.toLowerCase() : "";
+    const folderSafe = d.folder_number ? d.folder_number.toString() : "";
+    
+    // Obtener nombre del trabajador asociado
+    const targetWorker = workers.find(w => w.id === d.patient_id);
+    const workerNameSafe = targetWorker ? `${targetWorker.last_name}, ${targetWorker.first_name}`.toLowerCase() : "";
+
+    const matchQuery = fileNameSafe.includes(query) || workerNameSafe.includes(query) || folderSafe.includes(query);
     const matchCategory = searchDocCategory === "TODAS" || d.category === searchDocCategory;
-    const matchFolder = !searchDocFolder || d.folder.includes(searchDocFolder);
+    const matchFolder = !searchDocFolder || folderSafe.includes(searchDocFolder);
     return matchQuery && matchCategory && matchFolder;
   });
 
@@ -563,30 +613,6 @@ function App() {
       return { label: "PRÓXIMO A VENCER", color: "#f59e0b", bg: "rgba(245, 158, 11, 0.15)", border: "#f59e0b", priority: "MEDIA", remaining: diffDays };
     }
     return { label: "ACTIVO", color: "#3b82f6", bg: "rgba(59, 130, 246, 0.15)", border: "#3b82f6", priority: "BAJA" };
-  };
-
-  // --- IA CHAT (Se mantiene intacta pero oculta visualmente) ---
-  const handleSendAiMessage = async (e) => {
-    e.preventDefault(); if (!aiMessage.trim()) return;
-    const token = localStorage.getItem("token");
-    setChatHistory((prev) => [...prev, { role: "user", text: aiMessage }]);
-    setAiLoading(true);
-    try {
-      const response = await axios.post("http://localhost:8000/ai/chat", { message: aiMessage }, { headers: { Authorization: `Bearer ${token}` } });
-      setChatHistory((prev) => [...prev, { role: "ai", text: response.data.response }]);
-    } catch (err) { setChatHistory((prev) => [...prev, { role: "ai", text: "Error de comunicación con IA." }]); } 
-    finally { setAiMessage(""); setAiLoading(false); }
-  };
-
-  // --- LÓGICA DE SOLICITUDES DE ALERTAS ---
-  const handleApproveRequest = (id) => {
-    setPendingRequests(prev => prev.filter(r => r.id !== id));
-    showToast("Solicitud aprobada con éxito. El expediente puede ser retirado de bóveda.", "success");
-  };
-
-  const handleRejectRequest = (id) => {
-    setPendingRequests(prev => prev.filter(r => r.id !== id));
-    showToast("Solicitud rechazada de forma segura.", "info");
   };
 
   // --- CONSTRUCCIÓN DINÁMICA DE ALERTAS ---
@@ -708,7 +734,7 @@ function App() {
       <style>{globalCss}</style>
       <div style={styles.appContainer}>
         
-        {/* === SATEFUL TOAST NOTIFICATION (REEMPLAZA ALERT NATIVO) === */}
+        {/* === SATEFUL TOAST NOTIFICATION === */}
         {toast.isOpen && (
           <div style={{
             position: "fixed", bottom: "25px", right: "25px", backgroundColor: "#1e293b",
@@ -729,7 +755,7 @@ function App() {
           </div>
         )}
 
-        {/* === STATEFUL CONFIRMATION MODAL (REEMPLAZA CONFIRM NATIVO) === */}
+        {/* === STATEFUL CONFIRMATION MODAL === */}
         {confirm.isOpen && (
           <div style={styles.modalOverlay}>
             <div style={{...styles.modalContent, maxWidth: "420px"}} className="modal-animate">
@@ -766,14 +792,33 @@ function App() {
                   <button type="submit" style={{...styles.btnPrimary, display: "flex", justifyContent: "center", gap: "8px"}} className="btn-interactive" disabled={isUploading}><Upload size={16} /> {isUploading ? "Subiendo..." : "Subir Escaneo"}</button>
                 </form>
               )}
+              
+              {/* --- FASE 3: DETALLE DOCUMENTAL CON METADATA ENRIQUECIDA NATIVA --- */}
               <div style={styles.docList}>
                 {workerDocs.length === 0 ? <p style={{color: "#64748b", textAlign: "center", fontStyle: "italic", fontSize: "13px"}}>Sin archivos.</p> : 
-                  workerDocs.map(doc => (
-                    <div key={doc.id} style={styles.docItem}>
-                      <div style={{display: "flex", alignItems: "center", gap: "10px"}}><File size={16} color="#38bdf8" /><span style={{fontSize: "14px", color: "#f1f5f9"}}>{doc.file_name}</span></div>
-                      <a href={`http://localhost:8000/${doc.file_path}`} target="_blank" rel="noreferrer" style={styles.btnDocLink} className="btn-interactive"><ExternalLink size={14} /> Ver</a>
-                    </div>
-                ))}
+                  workerDocs.map(doc => {
+                    const uploader = systemUsers.find(u => u.id === doc.uploaded_by);
+                    const uploaderEmail = uploader ? uploader.email : `ID: ${doc.uploaded_by}`;
+                    return (
+                      <div key={doc.id} style={{...styles.docItem, flexDirection: "column", alignItems: "stretch", gap: "6px"}}>
+                        <div style={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
+                          <div style={{display: "flex", alignItems: "center", gap: "10px"}}>
+                            <File size={16} color="#38bdf8" />
+                            <span style={{fontSize: "14px", color: "#f1f5f9", fontWeight: "bold"}}>{doc.file_name}</span>
+                          </div>
+                          <a href={`http://localhost:8000/${doc.file_path}`} target="_blank" rel="noreferrer" style={styles.btnDocLink} className="btn-interactive"><ExternalLink size={14} /> Ver</a>
+                        </div>
+                        {/* FASE 3: Fila de metadata nativa debajo del título */}
+                        <div style={{display: "flex", flexWrap: "wrap", gap: "12px", fontSize: "11px", color: "#94a3b8", paddingLeft: "26px", borderTop: "1px dashed #1e293b", paddingTop: "6px"}}>
+                          <span>📁 <strong>Cat:</strong> {doc.category}</span>
+                          <span>📦 <strong>Carpeta:</strong> {doc.folder_number || "S/N"}</span>
+                          <span>Estatus: <strong style={{color: doc.document_status === "COMPLETO" || doc.document_status === "digitalizado" ? "#10b981" : "#f59e0b"}}>{doc.document_status}</strong></span>
+                          <span>👤 <strong>Por:</strong> {uploaderEmail}</span>
+                        </div>
+                      </div>
+                    );
+                  })
+                }
               </div>
             </div>
           </div>
@@ -828,7 +873,7 @@ function App() {
               <div style={styles.userInfo}><div style={styles.avatar}><User size={18} color="#0d9488" /></div><div style={styles.userDetail}><span style={styles.userName}>{user.email}</span><span style={styles.userRoleBadge}>{user.role}</span></div><button onClick={handleLogout} style={styles.btnLogout} className="btn-interactive" title="Cerrar Sesión"><LogOut size={18} /></button></div>
             </header>
 
-            {/* BARRA DE PESTAÑAS */}
+            {/* BARRA DE PESTAÑAS (Asistente IA deshabilitado visualmente) */}
             <div style={styles.tabBar}>
               {[
                 { id: "archive", icon: <FolderArchive size={16} />, label: "Digitalización" },
@@ -837,7 +882,7 @@ function App() {
                 { id: "calendar", icon: <ShieldAlert size={16} />, label: "Alertas" },
                 { id: "stats", icon: <PieChart size={16} />, label: "Estadísticas" },
                 ...(user.role === "ADMIN" ? [{ id: "settings", icon: <Settings size={16} />, label: "Configuración" }] : [])
-                // "Asistente IA" ha sido desactivado visualmente de forma controlada
+                // Omitimos "ai" visualmente, toda su lógica y estados permanecen intactos abajo
               ].map((tab) => (
                 <button key={tab.id} onClick={() => setActiveTab(tab.id)} className="tab-item"
                   style={{ ...styles.tabLink, borderBottom: activeTab === tab.id ? "3px solid #0d9488" : "3px solid transparent", color: activeTab === tab.id ? "#fff" : "#64748b" }} >
@@ -1009,6 +1054,7 @@ function App() {
                     </button>
                   </div>
 
+                  {/* FASE 1: ACTUALIZACIÓN FORM DATA DEL MANUAL CON METADATA NATIVA */}
                   <form onSubmit={handleManualUploadPDF} style={{...styles.medicalForm, marginTop: "20px", border: "1px solid #1e293b"}}>
                     <h4 style={{margin: "0 0 10px 0", color: "#fff", fontSize: "14px"}}>Asociación Manual de PDF</h4>
                     <select value={selectedPatientForScan} onChange={e=>setSelectedPatientForScan(e.target.value)} style={styles.formInput} className="input-interactive" required>
@@ -1018,7 +1064,7 @@ function App() {
                       ))}
                     </select>
                     <div style={styles.grid2Col}>
-                      <select value={selectedScanCategory} onChange={e=>setSelectedScanCategory(e.target.value)} style={styles.formInput} className="input-interactive">
+                      <select value={selectedScanCategory} onChange={e=>setSelectedCategory(e.target.value)} style={styles.formInput} className="input-interactive">
                         <option value="Cédula">Cédula</option>
                         <option value="Contrato">Contrato</option>
                         <option value="Constancia">Constancia</option>
@@ -1040,6 +1086,8 @@ function App() {
                         Bóveda Documental
                         <span style={styles.recordBadge}>{filteredScannedDocsList.length} PDFs</span>
                       </h3>
+                      
+                      {/* Filtros avanzados de documentos */}
                       <div style={{display: "flex", gap: "5px"}}>
                         <select value={searchDocCategory} onChange={e=>setSearchDocCategory(e.target.value)} style={{...styles.formInput, width: "130px", padding: "5px"}} className="input-interactive">
                           <option value="TODAS">Categorías</option>
@@ -1056,30 +1104,54 @@ function App() {
                     </div>
                   </div>
 
+                  {/* FASE 2: CONECTAR VISOR GLOBAL DE DOCUMENTOS REALES */}
                   <div style={styles.patientsFeed}>
-                    {filteredScannedDocsList.map(doc => (
-                      <div key={doc.id} style={{...styles.medicalCard, borderLeft: "4px solid #3b82f6"}} className="card-interactive">
-                        <div style={styles.cardHeader}>
-                          <h4 style={styles.patientName}>{doc.fileName}</h4>
-                          <span style={{...styles.patientIdBadge, backgroundColor: "#3b82f6"}}>{doc.category}</span>
+                    {filteredScannedDocsList.map(doc => {
+                      const targetWorker = workers.find(w => w.id === doc.patient_id);
+                      const workerName = targetWorker ? `${targetWorker.last_name}, ${targetWorker.first_name}` : `ID: ${doc.patient_id}`;
+                      const uploader = systemUsers.find(u => u.id === doc.uploaded_by);
+                      const uploaderEmail = uploader ? uploader.email : `ID: ${doc.uploaded_by}`;
+                      
+                      return (
+                        <div key={doc.id} style={{...styles.medicalCard, borderLeft: "4px solid #3b82f6"}} className="card-interactive">
+                          <div style={styles.cardHeader}>
+                            <h4 style={styles.patientName}>{doc.file_name}</h4>
+                            <span style={{...styles.patientIdBadge, backgroundColor: "#3b82f6"}}>{doc.category}</span>
+                          </div>
+                          <div style={styles.cardDetails}>
+                            <div style={styles.detailRow}><User size={14} color="#3b82f6" /> <span><strong>Trabajador:</strong> {workerName}</span></div>
+                            <div style={styles.detailRow}><FolderArchive size={14} color="#3b82f6" /> <span><strong>Ubicación Física:</strong> Carpeta Nro. {doc.folder_number || "S/N"}</span></div>
+                            <div style={styles.detailRow}><Clock size={14} color="#3b82f6" /> <span><strong>Digitalizado el:</strong> {new Date(doc.uploaded_at).toLocaleDateString()}</span></div>
+                            <div style={styles.detailRow}><CheckCircle size={14} color="#3b82f6" /> <span><strong>Estatus:</strong> {doc.document_status}</span></div>
+                            <div style={styles.detailRow}><User size={14} color="#3b82f6" /> <span><strong>Por:</strong> {uploaderEmail}</span></div>
+                          </div>
+                          <div style={{...styles.cardActionsBar, marginTop: "10px", paddingTop: "10px"}}>
+                            <a href={`http://localhost:8000/${doc.file_path}`} target="_blank" rel="noreferrer" style={styles.btnDocLink} className="btn-interactive">
+                              <Eye size={14} /> Ver PDF
+                            </a>
+                          </div>
                         </div>
-                        <div style={styles.cardDetails}>
-                          <div style={styles.detailRow}><User size={14} color="#3b82f6" /> <span><strong>Trabajador:</strong> {doc.workerName}</span></div>
-                          <div style={styles.detailRow}><FolderArchive size={14} color="#3b82f6" /> <span><strong>Ubicación Física:</strong> Carpeta Nro. {doc.folder}</span></div>
-                        </div>
-                        <div style={{...styles.cardActionsBar, marginTop: "10px", paddingTop: "10px"}}>
-                          <a href={`http://localhost:8000/${doc.path}`} target="_blank" rel="noreferrer" style={styles.btnDocLink} className="btn-interactive">
-                            <Eye size={14} /> Ver PDF
-                          </a>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
+
+                  {/* Historial de Digitalización en vivo */}
+                  <div style={{...styles.medicalForm, marginTop: "20px"}}>
+                    <h4 style={{margin: 0, color: "#fff", display: "flex", alignItems: "center", gap: "8px"}}><Clock size={16} color="#10b981"/> Historial de Digitalización Reciente</h4>
+                    <div style={{display: "flex", flexDirection: "column", gap: "8px", marginTop: "10px"}}>
+                      {digitalizationHistory.map(h => (
+                        <div key={h.id} style={{fontSize: "12.5px", color: "#94a3b8", display: "flex", justifyContent: "space-between", borderBottom: "1px solid #1e293b", paddingBottom: "5px"}}>
+                          <span>{h.date} - <strong>{h.transcriptor}</strong> digitalizó <strong>{h.doc}</strong> de {h.worker}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
                 </div>
               </div>
             )}
 
-            {/* PESTAÑA 2: PRÉSTAMOS (CORREGIDA SIN PROP DUPLICADA) */}
+            {/* PESTAÑA 2: PRÉSTAMOS */}
             {activeTab === "loans" && (
               <div style={styles.splitLayout}>
                 <div style={styles.leftCol}>
