@@ -168,9 +168,10 @@ function App() {
   // MODAL DE USUARIOS
   const [showUserModal, setShowUserModal] = useState(false);
   const [systemUsers, setSystemUsers] = useState([]);
-  const [newUserEmail, setNewUserEmail] = useState("");
+  const [newUserName, setNewUserName] = useState("");
   const [newUserPassword, setNewUserPassword] = useState("");
   const [newUserRole, setNewUserRole] = useState("GUEST");
+  const [userSuccessMsg, setUserSuccessMsg] = useState(""); // <-- Banner de éxito interno (reemplaza alert nativo)
 
   // ESTADOS REALES DE PRÉSTAMOS
   const [loans, setLoans] = useState([]);
@@ -258,7 +259,7 @@ function App() {
     const params = new URLSearchParams();
     params.append("username", email); params.append("password", password);
     try {
-      const response = await axios.post("http://localhost:8000/auth/login", params, { headers: { "Content-Type": "application/x-www-form-urlencoded" }});
+      const response = await axios.post("/auth/login", params, { headers: { "Content-Type": "application/x-www-form-urlencoded" }});
       localStorage.setItem("token", response.data.access_token);
       await fetchUserProfile(response.data.access_token);
     } catch (err) { setError("Credenciales incorrectas."); } finally { setLoading(false); }
@@ -266,7 +267,7 @@ function App() {
 
   const fetchUserProfile = async (token) => {
     try {
-      const response = await axios.get("http://localhost:8000/users/me", { headers: { Authorization: `Bearer ${token}` }});
+      const response = await axios.get("/users/me", { headers: { Authorization: `Bearer ${token}` }});
       setUser(response.data);
     } catch (err) { handleLogout(); }
   };
@@ -280,20 +281,21 @@ function App() {
   // GESTIÓN DE USUARIOS
   const fetchSystemUsers = async () => {
     try {
-      const res = await axios.get("http://localhost:8000/users/", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }});
+      const res = await axios.get("/users/", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }});
       setSystemUsers(res.data);
     } catch (err) { console.error(err); }
   };
 
   const handleCreateUser = async (e) => {
     e.preventDefault();
-    if(!newUserEmail || !newUserPassword) return showToast("Faltan datos para crear el usuario.", "warning");
+    if(!newUserName || !newUserPassword) return alert("Faltan credenciales");
     try {
-      await axios.post("http://localhost:8000/users/", { email: newUserEmail, password: newUserPassword, role: newUserRole });
-      showToast("Usuario administrador creado exitosamente.", "success");
-      setNewUserEmail(""); setNewUserPassword("");
+      await axios.post("/users/", { username: newUserName, password: newUserPassword, role: newUserRole });
+      setUserSuccessMsg("Usuario creado exitosamente.");
+      setTimeout(() => setUserSuccessMsg(""), 4000);
+      setNewUserName(""); setNewUserPassword("");
       fetchSystemUsers();
-    } catch (err) { showToast("No se pudo crear el usuario. Revisa el correo.", "error"); }
+    } catch (err) { alert("Error al crear usuario."); }
   };
 
   const handleDeleteUser = async (userId) => {
@@ -303,7 +305,7 @@ function App() {
       "¿Confirma la eliminación permanente de este usuario? Perderá acceso inmediato al sistema.",
       async () => {
         try {
-          await axios.delete(`http://localhost:8000/users/${userId}`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }});
+          await axios.delete(`/users/${userId}`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }});
           showToast("Usuario eliminado correctamente.", "success");
           fetchSystemUsers();
         } catch(err) { showToast("Error al eliminar el usuario.", "error"); }
@@ -317,7 +319,7 @@ function App() {
   const fetchWorkers = async () => {
     const token = localStorage.getItem("token");
     try {
-      const response = await axios.get("http://localhost:8000/patients/", { headers: { Authorization: `Bearer ${token}` }});
+      const response = await axios.get("/patients/", { headers: { Authorization: `Bearer ${token}` }});
       setWorkers(response.data); setRecordsLoaded(true); 
     } catch (err) { showToast("Error al cargar los registros desde el servidor.", "error"); }
   };
@@ -334,10 +336,10 @@ function App() {
 
     try {
       if (editingWorkerId) {
-        await axios.put(`http://localhost:8000/patients/${editingWorkerId}`, workerData, { headers: { Authorization: `Bearer ${token}` }});
+        await axios.put(`/patients/${editingWorkerId}`, workerData, { headers: { Authorization: `Bearer ${token}` }});
         showToast("Expediente modificado con éxito.", "success");
       } else {
-        await axios.post("http://localhost:8000/patients/", workerData, { headers: { Authorization: `Bearer ${token}` }});
+        await axios.post("/patients/", workerData, { headers: { Authorization: `Bearer ${token}` }});
         showToast("Expediente digitalizado y guardado con éxito.", "success");
       }
       handleCancelEdit(); if (recordsLoaded) fetchWorkers();
@@ -368,7 +370,7 @@ function App() {
       "¿Está seguro de eliminar permanentemente este expediente? Esta acción es irreversible.",
       async () => {
         try { 
-          await axios.delete(`http://localhost:8000/patients/${workerId}`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }}); 
+          await axios.delete(`/patients/${workerId}`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }}); 
           showToast("Expediente eliminado de la base de datos.", "success");
           fetchWorkers(); 
         } catch (err) { showToast("Error al intentar eliminar el expediente.", "error"); }
@@ -381,7 +383,7 @@ function App() {
     const token = localStorage.getItem("token");
     setAuditingWorkerId(workerId);
     try {
-      const res = await axios.post(`http://localhost:8000/patients/${workerId}/audit`, {}, {
+      const res = await axios.post(`/patients/${workerId}/audit`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
       // Actualizamos únicamente la tarjeta afectada
@@ -398,7 +400,7 @@ function App() {
   const handleOpenDocs = (worker) => { setSelectedWorker(worker); setShowDocModal(true); fetchWorkerDocs(worker.id); };
   const handleCloseDocs = () => { setShowDocModal(false); setSelectedWorker(null); setWorkerDocs([]); setFileUpload(null); setFileDesc(""); };
   const fetchWorkerDocs = async (workerId) => {
-    try { const res = await axios.get(`http://localhost:8000/patients/${workerId}/documents`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }); setWorkerDocs(res.data); } catch (err) {}
+    try { const res = await axios.get(`/patients/${workerId}/documents`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }); setWorkerDocs(res.data); } catch (err) {}
   };
 
   // FASE 1: CARGA INDIVIDUAL ASOCIADA AL ENDPOINT NATIVO
@@ -416,7 +418,7 @@ function App() {
     formData.append("qr_code", "");
 
     try {
-      await axios.post(`http://localhost:8000/patients/${selectedWorker.id}/documents`, formData, { headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" }});
+      await axios.post(`/patients/${selectedWorker.id}/documents`, formData, { headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" }});
       setFileUpload(null); setFileDesc(""); fetchWorkerDocs(selectedWorker.id); showToast("Archivo indexado con éxito.", "success");
     } catch (err) { showToast("Error al procesar el archivo.", "error"); } finally { setIsUploading(false); }
   };
@@ -488,7 +490,7 @@ function App() {
     formData.append("qr_code", qrInputManual || "");
 
     try {
-      const res = await axios.post(`http://localhost:8000/patients/${selectedPatientForScan}/documents/auto`, formData, {
+      const res = await axios.post(`/patients/${selectedPatientForScan}/documents/auto`, formData, {
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" }
       });
 
@@ -508,7 +510,7 @@ function App() {
   const fetchGlobalDocs = async () => {
     const token = localStorage.getItem("token");
     try {
-      const res = await axios.get("http://localhost:8000/patients/documents/all", {
+      const res = await axios.get("/patients/documents/all", {
         headers: { Authorization: `Bearer ${token}` }
       });
       setGlobalDocsList(res.data);
@@ -520,7 +522,7 @@ function App() {
   // PRÉSTAMOS (MÓDULO REAL)
   const fetchLoans = async () => {
     try {
-      const res = await axios.get("http://localhost:8000/loans/", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } });
+      const res = await axios.get("/loans/", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } });
       setLoans(res.data);
     } catch (err) { console.error(err); }
   };
@@ -529,7 +531,7 @@ function App() {
     e.preventDefault();
     if(!selectedPatientId || !borrowerName || !expectedReturnDate) return showToast("Faltan datos del préstamo.", "warning");
     try {
-      await axios.post("http://localhost:8000/loans/", {
+      await axios.post("/loans/", {
         patient_id: parseInt(selectedPatientId),
         borrower_name: borrowerName,
         checkout_date: checkoutDate || today,
@@ -543,7 +545,7 @@ function App() {
 
   const handleReturnLoan = async (loanId) => {
     try {
-      await axios.put(`http://localhost:8000/loans/${loanId}/return`, {}, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } });
+      await axios.put(`/loans/${loanId}/return`, {}, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } });
       showToast("Retorno de expediente físico procesado.", "success");
       fetchLoans();
     } catch (err) { showToast("Error al procesar el retorno.", "error"); }
@@ -757,7 +759,7 @@ function App() {
 
         {/* === STATEFUL CONFIRMATION MODAL === */}
         {confirm.isOpen && (
-          <div style={styles.modalOverlay}>
+          <div style={{...styles.modalOverlay, zIndex: 10005}}> {/* <-- Z-Index elevado para quedar por encima del modal de Gestión de Accesos (9999) */}
             <div style={{...styles.modalContent, maxWidth: "420px"}} className="modal-animate">
               <div style={styles.modalHeader}>
                 <div style={{display: "flex", alignItems: "center", gap: "10px"}}>
@@ -806,7 +808,7 @@ function App() {
                             <File size={16} color="#38bdf8" />
                             <span style={{fontSize: "14px", color: "#f1f5f9", fontWeight: "bold"}}>{doc.file_name}</span>
                           </div>
-                          <a href={`http://localhost:8000/${doc.file_path}`} target="_blank" rel="noreferrer" style={styles.btnDocLink} className="btn-interactive"><ExternalLink size={14} /> Ver</a>
+                          <a href={`/${doc.file_path}`} target="_blank" rel="noreferrer" style={styles.btnDocLink} className="btn-interactive"><ExternalLink size={14} /> Ver</a>
                         </div>
                         {/* FASE 3: Fila de metadata nativa debajo del título */}
                         <div style={{display: "flex", flexWrap: "wrap", gap: "12px", fontSize: "11px", color: "#94a3b8", paddingLeft: "26px", borderTop: "1px dashed #1e293b", paddingTop: "6px"}}>
@@ -833,8 +835,18 @@ function App() {
                 <button onClick={() => setShowUserModal(false)} style={styles.btnCancelEdit} className="btn-interactive"><X size={20} /></button>
               </div>
               
+              {userSuccessMsg && <div style={styles.alertSuccess}>{userSuccessMsg}</div>}
+
               <form onSubmit={handleCreateUser} style={{display: "flex", gap: "10px", marginBottom: "15px"}}>
-                <input type="email" placeholder="Correo del empleado..." value={newUserEmail} onChange={e=>setNewUserEmail(e.target.value)} style={styles.formInput} className="input-interactive" required/>
+                <input 
+                  type="text" // <-- CAMBIADO: De "email" a "text"
+                  placeholder="Nombre de usuario..." // <-- ACTUALIZADO: Más intuitivo
+                  value={newUserName} 
+                  onChange={e => setNewUserName(e.target.value)} // <-- CORREGIDO: "N" Mayúscula para evitar crasheos
+                  style={styles.formInput} 
+                  className="input-interactive" 
+                  required
+                />
                 <input type="password" placeholder="Clave..." value={newUserPassword} onChange={e=>setNewUserPassword(e.target.value)} style={{...styles.formInput, width: "150px"}} className="input-interactive" required/>
                 <select value={newUserRole} onChange={e=>setNewUserRole(e.target.value)} style={{...styles.formInput, width: "120px"}} className="input-interactive"><option value="GUEST">GUEST</option><option value="ADMIN">ADMIN</option></select>
                 <button type="submit" style={{...styles.btnPrimary, width: "auto", display: "flex", gap: "5px", alignItems: "center"}} className="btn-interactive"><Plus size={16}/> Crear</button>
@@ -844,7 +856,7 @@ function App() {
                 <div style={{display: "flex", justifyContent: "space-between", padding: "12px 15px", borderBottom: "1px solid #334155", color: "#94a3b8", fontSize: "13px", fontWeight: "bold"}}><span style={{flex: 2}}>Usuario</span><span style={{flex: 1}}>Rol</span><span style={{flex: 1, textAlign: "right"}}>Acciones</span></div>
                 {systemUsers.map(su => (
                   <div key={su.id} style={{display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 15px", borderBottom: "1px solid #1e293b"}}>
-                    <span style={{flex: 2, color: "#fff", display: "flex", alignItems: "center", gap: "8px"}}>{su.id === user.id ? <CheckCircle size={16} color="#10b981"/> : <User size={16} color="#94a3b8"/>} {su.email}</span>
+                    <span style={{flex: 2, color: "#fff", display: "flex", alignItems: "center", gap: "8px"}}>{su.id === user.id ? <CheckCircle size={16} color="#10b981"/> : <User size={16} color="#94a3b8"/>} {su.username}</span>
                     <span style={{flex: 1}}><span style={{...styles.userRoleBadge, backgroundColor: su.role === "ADMIN" ? "#0369a1" : "#475569"}}>{su.role}</span></span>
                     <div style={{flex: 1, textAlign: "right"}}><button onClick={() => handleDeleteUser(su.id)} style={{...styles.btnActionIcon, opacity: su.id === user.id ? 0.3 : 1}} className="btn-interactive btn-danger" disabled={su.id === user.id}><Trash2 size={14}/></button></div>
                   </div>
@@ -860,7 +872,22 @@ function App() {
             <form onSubmit={handleLogin} style={styles.loginCard} className="card-interactive">
               <div style={styles.loginHeader}><div style={styles.logoIconBg}><FolderArchive size={32} color="#0d9488" /></div><h2 style={styles.loginTitle}>SAD-TH</h2><p style={styles.loginSubtitle}>Sistema de Archivo Digital - Talento Humano</p></div>
               {error && <div style={styles.alertError}>{error}</div>}
-              <div style={styles.inputGroup}><label style={styles.inputLabel}>Usuario (Email)</label><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} style={styles.formInput} className="input-interactive" required /></div>
+              
+              {/* --- LÍNEA MODIFICADA AQUÍ --- */}
+              <div style={styles.inputGroup}>
+                <label style={styles.inputLabel}>Nombre de Usuario</label>
+                <input 
+                  type="text" 
+                  value={email} 
+                  onChange={(e) => setEmail(e.target.value)} 
+                  style={styles.formInput} 
+                  className="input-interactive" 
+                  placeholder="Ej: jose_ochoa" 
+                  required 
+                />
+              </div>
+              {/* ----------------------------- */}
+
               <div style={styles.inputGroup}><label style={styles.inputLabel}>Clave de Acceso</label><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} style={styles.formInput} className="input-interactive" required /></div>
               <button type="submit" style={styles.btnPrimary} className="btn-interactive" disabled={loading}>{loading ? "Autenticando..." : "Ingresar"}</button>
             </form>
@@ -1126,7 +1153,7 @@ function App() {
                             <div style={styles.detailRow}><User size={14} color="#3b82f6" /> <span><strong>Por:</strong> {uploaderEmail}</span></div>
                           </div>
                           <div style={{...styles.cardActionsBar, marginTop: "10px", paddingTop: "10px"}}>
-                            <a href={`http://localhost:8000/${doc.file_path}`} target="_blank" rel="noreferrer" style={styles.btnDocLink} className="btn-interactive">
+                            <a href={`/${doc.file_path}`} target="_blank" rel="noreferrer" style={styles.btnDocLink} className="btn-interactive">
                               <Eye size={14} /> Ver PDF
                             </a>
                           </div>
@@ -1408,6 +1435,7 @@ const styles = {
   btnActionIcon: { padding: "6px", backgroundColor: "#334155", color: "#94a3b8", border: "none", borderRadius: "6px", cursor: "pointer", display: "flex" },
 
   modalOverlay: { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.75)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 9999, backdropFilter: "blur(4px)" },
+  alertSuccess: { backgroundColor: "rgba(16, 185, 129, 0.15)", border: "1px solid #10b981", color: "#6ee7b7", padding: "10px 15px", borderRadius: "8px", fontSize: "13px", fontWeight: "bold", marginBottom: "10px" },
   modalContent: { backgroundColor: "#1e293b", padding: "25px", borderRadius: "16px", width: "90%", maxWidth: "550px", border: "1px solid #334155", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.6)", display: "flex", flexDirection: "column", gap: "15px" },
   modalHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #334155", paddingBottom: "15px" },
   modalTitle: { margin: 0, color: "#fff", fontSize: "18px", fontWeight: "bold" },
