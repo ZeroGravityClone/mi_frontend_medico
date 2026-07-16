@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { 
   FolderArchive, User, LogOut, Plus, Calendar, 
@@ -6,7 +6,7 @@ import {
   MapPin, CreditCard, Bot, Send, ShieldAlert,
   Printer, FileDown, FileSpreadsheet, Paperclip, Eye, Trash2,
   PieChart, Settings, Images, Clock, Upload, File, ExternalLink, CheckCircle, Users,
-  ArrowRightLeft, AlertCircle, QrCode
+  ArrowRightLeft, AlertCircle, QrCode, Brain, Briefcase
 } from "lucide-react";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
@@ -54,6 +54,17 @@ const globalCss = `
   ::-webkit-scrollbar-track { background: #0f172a; }
   ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
   ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+  /* FASE 2: Personalidad visual de los botones "Auditar con IA" y "Ficha" */
+  .btn-ai-audit { background-color: rgba(99, 102, 241, 0.15) !important; color: #a5b4fc !important; border: 1px solid rgba(99, 102, 241, 0.4) !important; }
+  .btn-ai-audit:hover { background-color: #6366f1 !important; color: #fff !important; transform: translateY(-2px) scale(1.03); box-shadow: 0 6px 16px rgba(99, 102, 241, 0.5); filter: brightness(1.1); }
+
+  .btn-print-ficha { background-color: rgba(16, 185, 129, 0.15) !important; color: #6ee7b7 !important; border: 1px solid rgba(16, 185, 129, 0.4) !important; }
+  .btn-print-ficha:hover { background-color: #10b981 !important; color: #fff !important; transform: translateY(-2px) scale(1.03); box-shadow: 0 6px 16px rgba(16, 185, 129, 0.5); filter: brightness(1.1); }
+
+  /* FASE 3: Botón "PDF" con rojo suave por defecto y transición a rojo intenso en hover */
+  .btn-pdf-soft { background-color: rgba(239, 68, 68, 0.15) !important; color: #fca5a5 !important; border: 1px solid rgba(239, 68, 68, 0.4) !important; }
+  .btn-pdf-soft:hover { background-color: #ef4444 !important; color: #fff !important; transform: translateY(-2px) scale(1.03); box-shadow: 0 6px 16px rgba(239, 68, 68, 0.5); filter: brightness(1.1); }
 `;
 
 // --- COMPONENTE: GRÁFICO CIRCULAR INTERACTIVO (SVG Puro, 0 librerías extra) ---
@@ -145,7 +156,10 @@ function App() {
   const [today] = useState(new Date().toISOString().split('T')[0]); 
 
   // FORMULARIO DIGITALIZACION
-  const [editingWorkerId, setEditingWorkerId] = useState(null); 
+  const [editingWorkerId, setEditingWorkerId] = useState(null);
+  const [isAutoRegistering, setIsAutoRegistering] = useState(false); // <-- FASE 1: Auto-Registro Inteligente con IA
+  const [autoRegisterSuccessMsg, setAutoRegisterSuccessMsg] = useState("");
+  const autoRegisterInputRef = useRef(null);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [cedula, setCedula] = useState(""); 
@@ -153,6 +167,7 @@ function App() {
   const [entryDate, setEntryDate] = useState("");
   const [phone, setPhone] = useState("");
   const [workEmail, setWorkEmail] = useState("");
+  const [workCargo, setWorkCargo] = useState(""); // <-- FASE 1: Cargo / Posición Laboral
   const [workStatus, setWorkStatus] = useState("ACTIVO");
   const [docStatus, setDocStatus] = useState("COMPLETO"); 
   const [archiveNotes, setArchiveNotes] = useState("");
@@ -164,6 +179,7 @@ function App() {
   const [fileUpload, setFileUpload] = useState(null);
   const [fileDesc, setFileDesc] = useState("");
   const [isUploading, setIsUploading] = useState(false);
+  const [scanAnalysisMode, setScanAnalysisMode] = useState("fast"); // <-- FASE 1: Modo de análisis IA ("fast" | "full")
 
   // MODAL DE USUARIOS
   const [showUserModal, setShowUserModal] = useState(false);
@@ -181,12 +197,8 @@ function App() {
   const [checkoutDate, setCheckoutDate] = useState("");
   const [loanSearchQuery, setLoanSearchQuery] = useState("");
   const [loanStatusFilter, setLoanStatusFilter] = useState("TODOS");
+  const [alertsSummary, setAlertsSummary] = useState({ overdue: [], due_soon: [], purges: [] }); // <-- FASE 6: Centro de Alertas real
 
-  // ESTADOS DE ALERTAS INTERACTIVAS (SOLICITUDES MOCK)
-  const [pendingRequests, setPendingRequests] = useState([
-    { id: 1, borrower: "Lic. Clara Gómez (RRHH)", doc: "V-18234567", workerName: "Rodríguez, María", date: "2026-06-15" },
-    { id: 2, borrower: "Abog. Felipe Nazoa (Consultoría)", doc: "V-9123456", workerName: "Silva, Ana", date: "2026-06-16" }
-  ]);
   const [alertTypeFilter, setAlertTypeFilter] = useState("TODAS");
   const [alertPriorityFilter, setAlertPriorityFilter] = useState("TODAS");
 
@@ -203,6 +215,13 @@ function App() {
   
   // Lista global conectada al backend
   const [globalDocsList, setGlobalDocsList] = useState([]);
+
+  // FASE 5: MODIFICAR/ELIMINAR DOCUMENTOS DESDE EL VISOR GLOBAL
+  const [showEditDocModal, setShowEditDocModal] = useState(false);
+  const [editingDoc, setEditingDoc] = useState(null);
+  const [editDocCategory, setEditDocCategory] = useState("");
+  const [editDocFileName, setEditDocFileName] = useState("");
+  const [editDocStatus, setEditDocStatus] = useState("");
 
   const [digitalizationHistory, setDigitalizationHistory] = useState([
     { id: 1, transcriptor: "archivo@hospital.com", date: "2026-06-18 09:30 AM", doc: "Copia de Cédula", worker: "Gómez, Carlos" },
@@ -249,6 +268,9 @@ function App() {
         fetchWorkers();
         if (activeTab === "pdf_scans") {
           fetchGlobalDocs();
+        }
+        if (activeTab === "calendar") {
+          fetchAlertsSummary();
         }
       }
     }
@@ -331,7 +353,7 @@ function App() {
     
     const workerData = {
       first_name: firstName, last_name: lastName, cedula, address,
-      birth_date: entryDate, phone, email: workEmail || null, medical_history: formattedNotes,
+      birth_date: entryDate, phone, email: workEmail || null, cargo: workCargo || null, medical_history: formattedNotes,
     };
 
     try {
@@ -346,10 +368,33 @@ function App() {
     } catch (err) { showToast("Error al procesar el expediente. Cédula duplicada o campos inválidos.", "error"); }
   };
 
+  // FASE 1: AUTO-REGISTRO INTELIGENTE (Crea expediente + primer documento desde un solo PDF)
+  const handleAutoRegisterWorker = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setIsAutoRegistering(true);
+    const token = localStorage.getItem("token");
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      await axios.post("/patients/auto-register", formData, { headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" }});
+      setAutoRegisterSuccessMsg("Expediente y documento registrados automáticamente con IA.");
+      setTimeout(() => setAutoRegisterSuccessMsg(""), 4000);
+      if (recordsLoaded) fetchWorkers();
+    } catch (err) {
+      showToast("Error al auto-registrar el expediente con IA.", "error");
+    } finally {
+      setIsAutoRegistering(false);
+      if (autoRegisterInputRef.current) autoRegisterInputRef.current.value = "";
+    }
+  };
+
   const handleSelectEdit = (worker) => {
     setEditingWorkerId(worker.id); setFirstName(worker.first_name); setLastName(worker.last_name);
     setCedula(worker.cedula || ""); setAddress(worker.address || "");
     setEntryDate(worker.birth_date); setPhone(worker.phone || ""); setWorkEmail(worker.email || "");
+    setWorkCargo(worker.cargo || "");
     
     const matches = worker.medical_history ? worker.medical_history.match(/^\[ESTADO: (.*?)\] \[DOCS: (.*?)\] - (.*)$/) : null;
     const oldMatches = worker.medical_history ? worker.medical_history.match(/^\[ESTADO: (.*?)\] - (.*)$/) : null;
@@ -361,7 +406,7 @@ function App() {
 
   const handleCancelEdit = () => {
     setEditingWorkerId(null); setFirstName(""); setLastName(""); setCedula(""); setAddress("");
-    setEntryDate(""); setPhone(""); setWorkEmail(""); setWorkStatus("ACTIVO"); setDocStatus("COMPLETO"); setArchiveNotes("");
+    setEntryDate(""); setPhone(""); setWorkEmail(""); setWorkCargo(""); setWorkStatus("ACTIVO"); setDocStatus("COMPLETO"); setArchiveNotes("");
   };
 
   const handleDeleteWorker = async (workerId) => {
@@ -403,23 +448,38 @@ function App() {
     try { const res = await axios.get(`/patients/${workerId}/documents`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }); setWorkerDocs(res.data); } catch (err) {}
   };
 
-  // FASE 1: CARGA INDIVIDUAL ASOCIADA AL ENDPOINT NATIVO
+  // FASE 4: ELIMINACIÓN PERMANENTE DE DOCUMENTOS (Disco + BD)
+  const handleDeleteDocument = (documentId) => {
+    triggerConfirm(
+      "Eliminar Documento",
+      "¿Confirma la eliminación permanente de este documento? Esta acción borrará el archivo del disco del servidor y no se puede deshacer.",
+      async () => {
+        try {
+          await axios.delete(`/patients/documents/${documentId}`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } });
+          showToast("Documento eliminado permanentemente.", "success");
+          if (selectedWorker) fetchWorkerDocs(selectedWorker.id);
+        } catch (err) {
+          showToast("Error al eliminar el documento del servidor.", "error");
+        }
+      }
+    );
+  };
+
+  // FASE 1: CARGA CONECTADA AL ENDPOINT REAL DE AUTO-CLASIFICACIÓN IA
   const handleUploadDoc = async (e) => {
-    e.preventDefault(); if (!fileUpload || !fileDesc) return showToast("Selecciona un archivo escaneado primero.", "warning");
+    e.preventDefault(); if (!fileUpload) return showToast("Selecciona un archivo escaneado primero.", "warning");
     setIsUploading(true);
     const token = localStorage.getItem("token");
-    
+
     const formData = new FormData();
     formData.append("file", fileUpload);
-    formData.append("description", fileDesc);
-    formData.append("category", "Otros");
-    formData.append("folder_number", "S/N");
-    formData.append("document_status", "digitalizado");
-    formData.append("qr_code", "");
 
     try {
-      await axios.post(`/patients/${selectedWorker.id}/documents`, formData, { headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" }});
-      setFileUpload(null); setFileDesc(""); fetchWorkerDocs(selectedWorker.id); showToast("Archivo indexado con éxito.", "success");
+      const res = await axios.post(`/patients/${selectedWorker.id}/documents/auto?mode=${scanAnalysisMode}`, formData, { headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" }});
+      // Actualizamos únicamente el estado local workerDocs con el documento devuelto por la IA
+      setWorkerDocs(prev => [...prev, res.data]);
+      setFileUpload(null); setFileDesc("");
+      showToast(`Documento clasificado por IA como: ${res.data.category || "Otros"}.`, "success");
     } catch (err) { showToast("Error al procesar el archivo.", "error"); } finally { setIsUploading(false); }
   };
 
@@ -519,12 +579,73 @@ function App() {
     }
   };
 
+  // FASE 5: MODIFICAR METADATA DE DOCUMENTOS (Visor Global)
+  const handleOpenEditDoc = (doc) => {
+    setEditingDoc(doc);
+    setEditDocCategory(doc.category || "");
+    setEditDocFileName(doc.file_name || "");
+    setEditDocStatus(doc.document_status || "");
+    setShowEditDocModal(true);
+  };
+
+  const handleCloseEditDoc = () => {
+    setShowEditDocModal(false); setEditingDoc(null); setEditDocCategory(""); setEditDocFileName(""); setEditDocStatus("");
+  };
+
+  const handleUpdateDocument = async (e) => {
+    e.preventDefault();
+    if (!editingDoc) return;
+    try {
+      await axios.put(`/patients/documents/${editingDoc.id}`, {
+        category: editDocCategory,
+        file_name: editDocFileName,
+        document_status: editDocStatus
+      }, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } });
+      showToast("Documento modificado con éxito.", "success");
+      fetchGlobalDocs();
+      handleCloseEditDoc();
+    } catch (err) {
+      showToast("Error al modificar la metadata del documento.", "error");
+    }
+  };
+
+  // FASE 5: ELIMINAR DOCUMENTOS (Visor Global)
+  const handleDeleteGlobalDocument = (documentId) => {
+    triggerConfirm(
+      "Eliminar Documento",
+      "¿Confirma la eliminación permanente de este documento? Esta acción borrará el archivo del disco del servidor y no se puede deshacer.",
+      async () => {
+        try {
+          await axios.delete(`/patients/documents/${documentId}`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } });
+          showToast("Documento eliminado permanentemente.", "success");
+          fetchGlobalDocs();
+        } catch (err) {
+          showToast("Error al eliminar el documento del servidor.", "error");
+        }
+      }
+    );
+  };
+
   // PRÉSTAMOS (MÓDULO REAL)
   const fetchLoans = async () => {
     try {
       const res = await axios.get("/loans/", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } });
       setLoans(res.data);
     } catch (err) { console.error(err); }
+  };
+
+  // FASE 6: CENTRO DE ALERTAS EN VIVO
+  const fetchAlertsSummary = async () => {
+    try {
+      const res = await axios.get("/alerts/summary", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } });
+      setAlertsSummary({
+        overdue: res.data.overdue || [],
+        due_soon: res.data.due_soon || [],
+        purges: res.data.purges || []
+      });
+    } catch (err) {
+      console.error("Error al sincronizar el centro de alertas", err);
+    }
   };
 
   const handleCreateLoan = async (e) => {
@@ -540,7 +661,10 @@ function App() {
       showToast("Préstamo de carpeta física registrado.", "success");
       setBorrowerName(""); setSelectedPatientId(""); setExpectedReturnDate("");
       fetchLoans();
-    } catch (err) { showToast("Error al registrar préstamo.", "error"); }
+    } catch (err) {
+      const backendDetail = err.response?.data?.detail;
+      showToast(backendDetail || "Error al registrar préstamo.", "error");
+    }
   };
 
   const handleReturnLoan = async (loanId) => {
@@ -551,23 +675,150 @@ function App() {
     } catch (err) { showToast("Error al procesar el retorno.", "error"); }
   };
 
+  // FASE 5: ELIMINACIÓN DE REGISTROS DE LA BITÁCORA DE PRÉSTAMOS
+  const handleDeleteLoan = (loanId) => {
+    triggerConfirm(
+      "Eliminar Registro de Préstamo",
+      "¿Confirma la eliminación permanente de este registro de la bitácora de préstamos? Esta acción no se puede deshacer.",
+      async () => {
+        try {
+          await axios.delete(`/loans/${loanId}`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } });
+          showToast("Registro de préstamo eliminado.", "success");
+          fetchLoans();
+        } catch (err) {
+          showToast("Error al eliminar el registro de préstamo.", "error");
+        }
+      }
+    );
+  };
+
   // IMPRIMIR Y PDF
   const handlePrintCard = (worker) => {
     const printWindow = window.open("", "_blank");
     printWindow.document.write(`
       <html><head><title>Ficha - ${worker.first_name} ${worker.last_name}</title><style>body { font-family: Arial, sans-serif; padding: 30px; } h1 { color: #0d9488; border-bottom: 2px solid #0d9488; padding-bottom: 10px;} .detail { margin-bottom: 15px; font-size: 16px; } .label { font-weight: bold; width: 150px; display: inline-block; color: #333;}</style></head>
-      <body><h1>Ficha de Personal - SAD-TH</h1><div class="detail"><span class="label">Nombres:</span> ${worker.first_name}</div><div class="detail"><span class="label">Apellidos:</span> ${worker.last_name}</div><div class="detail"><span class="label">Cédula:</span> ${worker.cedula}</div><div class="detail"><span class="label">F. Ingreso:</span> ${worker.birth_date}</div><div class="detail"><span class="label">Teléfono:</span> ${worker.phone || "N/A"}</div><div class="detail"><span class="label">Dirección:</span> ${worker.address || "N/A"}</div><div class="detail"><span class="label">Observaciones:</span> ${worker.medical_history || "N/A"}</div><script>window.onload = function() { window.print(); window.close(); }</script></body></html>
+      <body><h1>Ficha de Personal - SAD-TH</h1><div class="detail"><span class="label">Nombres:</span> ${worker.first_name}</div><div class="detail"><span class="label">Apellidos:</span> ${worker.last_name}</div><div class="detail"><span class="label">Cédula:</span> ${worker.cedula}</div><div class="detail"><span class="label">Cargo:</span> ${worker.cargo || "No especificado"}</div><div class="detail"><span class="label">F. Ingreso:</span> ${worker.birth_date}</div><div class="detail"><span class="label">Teléfono:</span> ${worker.phone || "N/A"}</div><div class="detail"><span class="label">Dirección:</span> ${worker.address || "N/A"}</div><div class="detail"><span class="label">Observaciones:</span> ${worker.medical_history || "N/A"}</div><script>window.onload = function() { window.print(); window.close(); }</script></body></html>
     `); printWindow.document.close();
   };
 
   const handleExportIndividualPDF = (worker) => {
     const doc = new jsPDF();
-    doc.setFontSize(22); doc.setTextColor(13, 148, 136); doc.text("Ficha de Personal - SAD-TH", 20, 20);
-    doc.setFontSize(12); doc.setTextColor(50, 50, 50);
-    doc.text(`Nombres: ${worker.first_name}`, 20, 35); doc.text(`Apellidos: ${worker.last_name}`, 20, 45); doc.text(`Cédula: ${worker.cedula}`, 20, 55); doc.text(`Fecha Ingreso: ${worker.birth_date}`, 20, 65); doc.text(`Teléfono: ${worker.phone || "No registrado"}`, 20, 75); doc.text(`Email: ${worker.email || "No registrado"}`, 20, 85); doc.text(`Dirección: ${worker.address || "No registrada"}`, 20, 95);
-    doc.setFont(undefined, 'bold'); doc.text("Observaciones del Expediente:", 20, 110); doc.setFont(undefined, 'normal');
-    const splitText = doc.splitTextToSize(worker.medical_history || "Sin observaciones", 170);
-    doc.text(splitText, 20, 120); doc.save(`Expediente_${worker.cedula}.pdf`);
+    const pageWidth = doc.internal.pageSize.width;
+
+    doc.setFillColor(13, 148, 136);
+    doc.rect(0, 0, pageWidth, 25, "F");
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.text("SAD-TH | SISTEMA DE ARCHIVO DIGITAL", 15, 16);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.text("HOSPITAL GENERAL DEL SUR - TALENTO HUMANO", pageWidth - 15, 16, { align: "right" });
+
+    doc.setDrawColor(20, 184, 166);
+    doc.setLineWidth(1.5);
+    doc.line(0, 25, pageWidth, 25);
+
+    doc.setTextColor(30, 41, 59);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.text("FICHA INDIVIDUAL DEL TRABAJADOR", 15, 42);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(148, 163, 184);
+    doc.text(`Fecha de Emisión: ${new Date().toLocaleDateString()}`, pageWidth - 15, 42, { align: "right" });
+
+    const drawSectionHeader = (title, y) => {
+      doc.setFillColor(241, 245, 249);
+      doc.rect(15, y, pageWidth - 30, 8, "F");
+      doc.setTextColor(13, 148, 136);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.text(title.toUpperCase(), 18, y + 6);
+    };
+
+    drawSectionHeader("1. Datos de Identidad y Registro", 52);
+    doc.setFontSize(10); doc.setTextColor(71, 85, 105);
+
+    doc.setFont("helvetica", "bold"); doc.text("Nombres del Empleado:", 20, 70);
+    doc.setFont("helvetica", "normal"); doc.text(`${worker.first_name}`, 65, 70);
+
+    doc.setFont("helvetica", "bold"); doc.text("Apellidos del Empleado:", 20, 78);
+    doc.setFont("helvetica", "normal"); doc.text(`${worker.last_name}`, 65, 78);
+
+    doc.setFont("helvetica", "bold"); doc.text("Cédula de Identidad:", 20, 86);
+    doc.setFont("helvetica", "bold"); doc.setTextColor(13, 148, 136);
+    doc.text(`${worker.cedula}`, 65, 86);
+
+    doc.setFont("helvetica", "bold"); doc.setTextColor(71, 85, 105);
+    doc.text("Cargo / Posición:", 20, 94);
+    doc.setFont("helvetica", "normal"); doc.text(`${worker.cargo || "No especificado"}`, 65, 94);
+
+    drawSectionHeader("2. Información de Contacto y Ubicación", 102);
+    doc.setTextColor(71, 85, 105);
+
+    doc.setFont("helvetica", "bold"); doc.text("Teléfono Celular:", 20, 120);
+    doc.setFont("helvetica", "normal"); doc.text(`${worker.phone || "No registrado"}`, 65, 120);
+
+    doc.setFont("helvetica", "bold"); doc.text("Correo Electrónico:", 20, 128);
+    doc.setFont("helvetica", "normal"); doc.text(`${worker.email || "No registrado"}`, 65, 128);
+
+    doc.setFont("helvetica", "bold"); doc.text("Dirección de Habitación:", 20, 136);
+    doc.setFont("helvetica", "normal");
+    const addressLines = doc.splitTextToSize(worker.address || "No registrada", 125);
+    doc.text(addressLines, 65, 136);
+
+    drawSectionHeader("3. Estatus de Expediente y Control Físico", 154);
+    doc.setTextColor(71, 85, 105);
+
+    doc.setFont("helvetica", "bold"); doc.text("Fecha de Ingreso:", 20, 172);
+    doc.setFont("helvetica", "normal"); doc.text(`${worker.birth_date}`, 65, 172);
+
+    const fullMatch = worker.medical_history ? worker.medical_history.match(/^\[ESTADO: (.*?)\] \[DOCS: (.*?)\] - (.*)$/) : null;
+    const partialMatch = worker.medical_history ? worker.medical_history.match(/^\[ESTADO: (.*?)\] - (.*)$/) : null;
+
+    let workStatus = "ACTIVO", docStatusPdf = "PENDIENTE", notes = worker.medical_history || "Sin observaciones.";
+    if (fullMatch) {
+      workStatus = fullMatch[1];
+      docStatusPdf = fullMatch[2];
+      notes = fullMatch[3];
+    } else if (partialMatch) {
+      workStatus = partialMatch[1];
+      notes = partialMatch[2];
+    }
+
+    doc.setFont("helvetica", "bold"); doc.text("Estatus Laboral:", 20, 180);
+    doc.setFont("helvetica", "normal"); doc.text(workStatus, 65, 180);
+
+    doc.setFont("helvetica", "bold"); doc.text("Estatus Documental:", 20, 188);
+    doc.setFont("helvetica", "bold");
+    if (docStatusPdf === "COMPLETO") doc.setTextColor(16, 185, 129);
+    else if (docStatusPdf === "CRITICO") doc.setTextColor(239, 68, 68);
+    else doc.setTextColor(245, 158, 11);
+    doc.text(docStatusPdf, 65, 188);
+
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.rect(20, 198, pageWidth - 40, 42, "FD");
+
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(30, 41, 59);
+    doc.text("Bitácora de Observaciones Físicas y Documentos Faltantes:", 24, 206);
+
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(71, 85, 105);
+    const notesLines = doc.splitTextToSize(notes, pageWidth - 48);
+    doc.text(notesLines, 24, 214);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    doc.text("Documento confidencial generado por SAD-TH para uso exclusivo del Hospital General del Sur.", pageWidth / 2, 280, { align: "center" });
+
+    doc.save(`Ficha_SAD-TH_${worker.cedula}.pdf`);
   };
 
   // --- FILTROS DE EXPEDIENTES (CONSOLIDADOS) ---
@@ -617,10 +868,12 @@ function App() {
     return { label: "ACTIVO", color: "#3b82f6", bg: "rgba(59, 130, 246, 0.15)", border: "#3b82f6", priority: "BAJA" };
   };
 
-  // --- CONSTRUCCIÓN DINÁMICA DE ALERTAS ---
-  const overdueAlerts = loans.filter(l => getLoanStatusAndColor(l).label === "VENCIDO").map(l => {
-    const info = getLoanStatusAndColor(l);
+  // --- CONSTRUCCIÓN DINÁMICA DE ALERTAS (FASE 6: fuente real /alerts/summary) ---
+  const overdueAlerts = alertsSummary.overdue.map(l => {
     const worker = workers.find(w => w.id === l.patient_id);
+    const lDate = new Date(l.expected_return_date); lDate.setHours(0,0,0,0);
+    const tDate = new Date(); tDate.setHours(0,0,0,0);
+    const delay = Math.abs(Math.ceil((lDate.getTime() - tDate.getTime()) / (1000 * 60 * 60 * 24)));
     return {
       id: `venc-${l.id}`,
       type: "VENCIDO",
@@ -629,14 +882,16 @@ function App() {
       bg: "rgba(239, 68, 68, 0.08)",
       border: "#ef4444",
       title: `Préstamo Crítico: ${l.borrower_name}`,
-      desc: `Tiene fuera de bóveda el expediente de ${worker ? `${worker.last_name}, ${worker.first_name}` : `ID: ${l.patient_id}`}.`,
-      meta: `Fecha límite venció el: ${l.expected_return_date} (${info.delay} días de retraso)`
+      desc: `Tiene fuera de bóveda el expediente de ${worker ? `${worker.last_name}, ${worker.first_name}` : `ID: ${l.patient_id}`}${worker?.cedula ? ` (C.I: ${worker.cedula})` : ""}.`,
+      meta: `Fecha límite venció el: ${l.expected_return_date} (${delay} días de retraso)`
     };
   });
 
-  const dueSoonAlerts = loans.filter(l => getLoanStatusAndColor(l).label === "PRÓXIMO A VENCER").map(l => {
-    const info = getLoanStatusAndColor(l);
+  const dueSoonAlerts = alertsSummary.due_soon.map(l => {
     const worker = workers.find(w => w.id === l.patient_id);
+    const lDate = new Date(l.expected_return_date); lDate.setHours(0,0,0,0);
+    const tDate = new Date(); tDate.setHours(0,0,0,0);
+    const remaining = Math.ceil((lDate.getTime() - tDate.getTime()) / (1000 * 60 * 60 * 24));
     return {
       id: `prox-${l.id}`,
       type: "POR_VENCER",
@@ -645,37 +900,13 @@ function App() {
       bg: "rgba(245, 158, 11, 0.08)",
       border: "#f59e0b",
       title: `Préstamo por Vencer: ${l.borrower_name}`,
-      desc: `Tiene el expediente de ${worker ? `${worker.last_name}, ${worker.first_name}` : `ID: ${l.patient_id}`}.`,
-      meta: `Debe retornar en: ${info.remaining === 0 ? "Hoy" : `${info.remaining} días`} (${l.expected_return_date})`
+      desc: `Tiene el expediente de ${worker ? `${worker.last_name}, ${worker.first_name}` : `ID: ${l.patient_id}`}${worker?.cedula ? ` (C.I: ${worker.cedula})` : ""}.`,
+      meta: `Debe retornar en: ${remaining <= 0 ? "Hoy" : `${remaining} días`} (${l.expected_return_date})`
     };
   });
 
-  const pendingRequestAlerts = pendingRequests.map(r => ({
-    id: `req-${r.id}`,
-    type: "PENDIENTE",
-    priority: "MEDIA",
-    color: "#3b82f6",
-    bg: "rgba(59, 130, 246, 0.08)",
-    border: "#3b82f6",
-    title: `Solicitud de Acceso`,
-    desc: `${r.borrower} solicita retirar la carpeta de ${r.workerName} (${r.doc}).`,
-    meta: `Solicitado el: ${r.date}`,
-    actions: (
-      <div style={{display: "flex", gap: "8px", marginTop: "10px"}}>
-        <button onClick={() => handleApproveRequest(r.id)} style={{...styles.btnActionSecondary, backgroundColor: "#10b981"}} className="btn-interactive">Aprobar</button>
-        <button onClick={() => handleRejectRequest(r.id)} style={{...styles.btnActionSecondary, backgroundColor: "#ef4444"}} className="btn-interactive">Rechazar</button>
-      </div>
-    )
-  }));
-
-  const expurgoAlerts = workers.filter(w => {
-    if (!w.birth_date) return false;
-    const entry = new Date(w.birth_date);
-    const limitYear = new Date();
-    limitYear.setFullYear(limitYear.getFullYear() - 5); 
-    return entry.getTime() < limitYear.getTime();
-  }).map(w => {
-    const years = new Date().getFullYear() - new Date(w.birth_date).getFullYear();
+  const expurgoAlerts = alertsSummary.purges.map(w => {
+    const years = w.birth_date ? new Date().getFullYear() - new Date(w.birth_date).getFullYear() : "N/D";
     return {
       id: `exp-${w.id}`,
       type: "EXPURGO",
@@ -689,7 +920,7 @@ function App() {
     };
   });
 
-  const allAlerts = [...overdueAlerts, ...dueSoonAlerts, ...pendingRequestAlerts, ...expurgoAlerts];
+  const allAlerts = [...overdueAlerts, ...dueSoonAlerts, ...expurgoAlerts];
 
   const filteredAlerts = allAlerts.filter(a => {
     const matchType = alertTypeFilter === "TODAS" || a.type === alertTypeFilter;
@@ -777,6 +1008,50 @@ function App() {
           </div>
         )}
 
+        {/* FASE 5: MODAL DE MODIFICACIÓN DE METADATA (Visor Global "PDF Escaneados") */}
+        {showEditDocModal && editingDoc && (
+          <div style={styles.modalOverlay}>
+            <div style={{...styles.modalContent, maxWidth: "420px"}} className="modal-animate">
+              <div style={styles.modalHeader}>
+                <div style={{display: "flex", alignItems: "center", gap: "10px"}}>
+                  <Edit size={20} color="#3b82f6" />
+                  <h3 style={styles.modalTitle}>Modificar Documento</h3>
+                </div>
+                <button onClick={handleCloseEditDoc} style={styles.btnCancelEdit} className="btn-interactive"><X size={18} /></button>
+              </div>
+              <form onSubmit={handleUpdateDocument} style={{display: "flex", flexDirection: "column", gap: "12px", marginTop: "10px"}}>
+                <div style={styles.inputGroup}>
+                  <label style={{fontSize: "11px", color: "#94a3b8", marginLeft: "5px"}}>Nombre del Archivo</label>
+                  <input type="text" value={editDocFileName} onChange={(e) => setEditDocFileName(e.target.value)} style={styles.formInput} className="input-interactive" required />
+                </div>
+                <div style={styles.inputGroup}>
+                  <label style={{fontSize: "11px", color: "#94a3b8", marginLeft: "5px"}}>Categoría</label>
+                  <select value={editDocCategory} onChange={(e) => setEditDocCategory(e.target.value)} style={styles.formInput} className="input-interactive">
+                    <option value="Cédula">Cédula</option>
+                    <option value="Título">Título</option>
+                    <option value="Contrato">Contrato</option>
+                    <option value="Certificado Médico">Certificado Médico</option>
+                    <option value="Otros">Otros</option>
+                  </select>
+                </div>
+                <div style={styles.inputGroup}>
+                  <label style={{fontSize: "11px", color: "#94a3b8", marginLeft: "5px"}}>Estado Documental</label>
+                  <select value={editDocStatus} onChange={(e) => setEditDocStatus(e.target.value)} style={styles.formInput} className="input-interactive">
+                    <option value="digitalizado">Digitalizado</option>
+                    <option value="COMPLETO">Completo</option>
+                    <option value="PENDIENTE">Pendiente</option>
+                  </select>
+                </div>
+                <div style={{display: "flex", gap: "10px", marginTop: "5px"}}>
+                  <button type="button" onClick={handleCloseEditDoc} style={{...styles.btnPrimary, backgroundColor: "#334155", color: "#fff"}} className="btn-interactive">Cancelar</button>
+                  <button type="submit" style={styles.btnPrimary} className="btn-interactive">Guardar Cambios</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+
         {/* === MODAL DE ARCHIVOS ESCANEADOS === */}
         {showDocModal && selectedWorker && (
           <div style={styles.modalOverlay}>
@@ -788,10 +1063,16 @@ function App() {
               {user?.role === "ADMIN" && (
                 <form onSubmit={handleUploadDoc} style={styles.uploadBox}>
                   <div style={{display: "flex", gap: "10px", alignItems: "center"}}>
-                    <input type="text" placeholder="Descripción (Ej: Copia Cédula)" value={fileDesc} onChange={(e) => setFileDesc(e.target.value)} style={styles.formInput} className="input-interactive" required />
+                    <input type="text" placeholder="Descripción (opcional)" value={fileDesc} onChange={(e) => setFileDesc(e.target.value)} style={styles.formInput} className="input-interactive" />
                     <input type="file" onChange={(e) => setFileUpload(e.target.files[0])} style={{color: "#94a3b8", fontSize: "13px", width: "180px"}} required />
                   </div>
-                  <button type="submit" style={{...styles.btnPrimary, display: "flex", justifyContent: "center", gap: "8px"}} className="btn-interactive" disabled={isUploading}><Upload size={16} /> {isUploading ? "Subiendo..." : "Subir Escaneo"}</button>
+                  {/* FASE 1: Toggle de Modo de Análisis IA */}
+                  <div style={{display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", color: "#94a3b8"}}>
+                    <Bot size={14} color="#0d9488" /> <span>Modo de Análisis:</span>
+                    <button type="button" onClick={() => setScanAnalysisMode("fast")} style={{padding: "4px 10px", borderRadius: "6px", border: "1px solid #334155", cursor: "pointer", fontSize: "12px", backgroundColor: scanAnalysisMode === "fast" ? "#0d9488" : "#1e293b", color: "#fff"}} className="btn-interactive">Rápido</button>
+                    <button type="button" onClick={() => setScanAnalysisMode("full")} style={{padding: "4px 10px", borderRadius: "6px", border: "1px solid #334155", cursor: "pointer", fontSize: "12px", backgroundColor: scanAnalysisMode === "full" ? "#0d9488" : "#1e293b", color: "#fff"}} className="btn-interactive">Completo</button>
+                  </div>
+                  <button type="submit" style={{...styles.btnPrimary, display: "flex", justifyContent: "center", gap: "8px"}} className="btn-interactive" disabled={isUploading}><Upload size={16} /> {isUploading ? "Analizando con IA..." : "Subir Escaneo"}</button>
                 </form>
               )}
               
@@ -800,7 +1081,7 @@ function App() {
                 {workerDocs.length === 0 ? <p style={{color: "#64748b", textAlign: "center", fontStyle: "italic", fontSize: "13px"}}>Sin archivos.</p> : 
                   workerDocs.map(doc => {
                     const uploader = systemUsers.find(u => u.id === doc.uploaded_by);
-                    const uploaderEmail = uploader ? uploader.email : `ID: ${doc.uploaded_by}`;
+                    const uploaderName = uploader ? uploader.username : `ID: ${doc.uploaded_by}`;
                     return (
                       <div key={doc.id} style={{...styles.docItem, flexDirection: "column", alignItems: "stretch", gap: "6px"}}>
                         <div style={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
@@ -808,14 +1089,19 @@ function App() {
                             <File size={16} color="#38bdf8" />
                             <span style={{fontSize: "14px", color: "#f1f5f9", fontWeight: "bold"}}>{doc.file_name}</span>
                           </div>
-                          <a href={`/${doc.file_path}`} target="_blank" rel="noreferrer" style={styles.btnDocLink} className="btn-interactive"><ExternalLink size={14} /> Ver</a>
+                          <div style={{display: "flex", gap: "6px", alignItems: "center"}}>
+                            <a href={`/${doc.file_path}`} target="_blank" rel="noreferrer" style={styles.btnDocLink} className="btn-interactive"><ExternalLink size={14} /> Ver</a>
+                            {user?.role === "ADMIN" && (
+                              <button type="button" onClick={() => handleDeleteDocument(doc.id)} style={styles.btnActionIcon} className="btn-interactive btn-danger" title="Eliminar Documento"><Trash2 size={14} /></button>
+                            )}
+                          </div>
                         </div>
                         {/* FASE 3: Fila de metadata nativa debajo del título */}
                         <div style={{display: "flex", flexWrap: "wrap", gap: "12px", fontSize: "11px", color: "#94a3b8", paddingLeft: "26px", borderTop: "1px dashed #1e293b", paddingTop: "6px"}}>
                           <span>📁 <strong>Cat:</strong> {doc.category}</span>
                           <span>📦 <strong>Carpeta:</strong> {doc.folder_number || "S/N"}</span>
                           <span>Estatus: <strong style={{color: doc.document_status === "COMPLETO" || doc.document_status === "digitalizado" ? "#10b981" : "#f59e0b"}}>{doc.document_status}</strong></span>
-                          <span>👤 <strong>Por:</strong> {uploaderEmail}</span>
+                          <span>👤 <strong>Por:</strong> {uploaderName}</span>
                         </div>
                       </div>
                     );
@@ -939,6 +1225,7 @@ function App() {
                         <div style={styles.inputWithIcon}><Phone size={16} style={styles.innerIcon} /><input type="text" placeholder="Teléfono" value={phone} onChange={(e) => setPhone(e.target.value)} style={{...styles.formInput, paddingLeft: "35px"}} className="input-interactive" /></div>
                       </div>
                       <div style={styles.inputWithIcon}><MapPin size={16} style={styles.innerIcon} /><input type="text" placeholder="Dirección Completa" value={address} onChange={(e) => setAddress(e.target.value)} style={{...styles.formInput, paddingLeft: "35px"}} className="input-interactive" /></div>
+                      <div style={styles.inputWithIcon}><Briefcase size={16} style={styles.innerIcon} /><input type="text" placeholder="Cargo / Posición Laboral" value={workCargo} onChange={(e) => setWorkCargo(e.target.value)} style={{...styles.formInput, paddingLeft: "35px"}} className="input-interactive" /></div>
                       
                       <div style={styles.grid2Col}>
                         <div style={styles.inputGroup}>
@@ -959,7 +1246,16 @@ function App() {
                         <FileText size={16} style={{...styles.innerIcon, top: "15px"}} />
                         <textarea placeholder="Faltan copias de cédula..." value={archiveNotes} onChange={(e) => setArchiveNotes(e.target.value)} style={{...styles.formInput, height: "70px", paddingLeft: "35px", paddingTop: "10px"}} className="input-interactive" required />
                       </div>
-                      <button type="submit" style={{...styles.btnPrimary, backgroundColor: editingWorkerId ? "#0f766e" : "#0d9488"}} className="btn-interactive">{editingWorkerId ? "Guardar Cambios" : "Guardar Expediente"}</button>
+                      {autoRegisterSuccessMsg && <div style={styles.alertSuccess}>{autoRegisterSuccessMsg}</div>}
+                      <div style={{display: "flex", gap: "10px"}}>
+                        <button type="submit" style={{...styles.btnPrimary, backgroundColor: editingWorkerId ? "#0f766e" : "#0d9488"}} className="btn-interactive">{editingWorkerId ? "Guardar Cambios" : "Guardar Expediente"}</button>
+                        {!editingWorkerId && (
+                          <button type="button" onClick={() => autoRegisterInputRef.current && autoRegisterInputRef.current.click()} style={{...styles.btnPrimary, backgroundColor: "#6366f1", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"}} className="btn-interactive" disabled={isAutoRegistering} title="Crea el expediente automáticamente a partir de un PDF/Imagen escaneado">
+                            <Upload size={16} /> {isAutoRegistering ? "Analizando con Llama 4..." : "Subir Carpeta Escaneada"}
+                          </button>
+                        )}
+                        <input type="file" ref={autoRegisterInputRef} onChange={handleAutoRegisterWorker} accept=".pdf,image/*" style={{display: "none"}} />
+                      </div>
                     </form>
                   </div>
                 ) : (
@@ -1004,6 +1300,7 @@ function App() {
                             </div>
                             <div style={styles.cardDetails}>
                               <div style={styles.detailRow}><CreditCard size={14} color="#0d9488" /> <span><strong>Cédula:</strong> {w.cedula}</span></div>
+                              <div style={styles.detailRow}><Briefcase size={14} color="#0d9488" /> <span><strong>Cargo:</strong> {w.cargo || "No especificado"}</span></div>
                               {w.email && <div style={styles.detailRow}><Mail size={14} color="#0d9488" /> <span><strong>Email:</strong> {w.email}</span></div>}
                               <div style={{display: "flex", flexDirection: "column", gap: "5px", padding: "10px", backgroundColor: dColor.bg, borderLeft: `3px solid ${dColor.border}`, borderRadius: "4px", marginTop: "8px"}}>
                                 <div style={{display: "flex", alignItems: "center", gap: "6px", color: dColor.text, fontWeight: "bold", fontSize: "12px"}}>{dColor.icon} {docSt === "COMPLETO" ? "Expediente Completo" : docSt === "CRITICO" ? "Faltan Documentos Críticos" : "Documentos Pendientes"}</div>
@@ -1013,8 +1310,13 @@ function App() {
                             <div style={styles.cardActionsBar}>
                               <div style={{display: "flex", gap: "6px"}}>
                                 <button onClick={() => handleOpenDocs(w)} style={styles.btnActionSecondary} className="btn-interactive btn-info" title="Ver Archivos Físicos"><Paperclip size={14} /> Archivos</button>
-                                <button onClick={() => handlePrintCard(w)} style={styles.btnActionSecondary} className="btn-interactive" title="Imprimir Plantilla"><Printer size={14} /> Ficha</button>
-                                <button onClick={() => handleExportIndividualPDF(w)} style={styles.btnActionSecondary} className="btn-interactive btn-danger" title="Descargar PDF Indiv."><FileDown size={14} /> PDF</button>
+                                <button onClick={() => handlePrintCard(w)} style={styles.btnActionSecondary} className="btn-interactive btn-print-ficha" title="Imprimir Plantilla"><Printer size={14} /> Ficha</button>
+                                <button onClick={() => handleExportIndividualPDF(w)} style={styles.btnActionSecondary} className="btn-interactive btn-pdf-soft" title="Descargar PDF Indiv."><FileDown size={14} /> PDF</button>
+                                {user.role === "ADMIN" && (
+                                  <button onClick={() => handleAuditWorker(w.id)} style={styles.btnActionSecondary} className="btn-interactive btn-ai-audit" title="Auditar Expediente con IA" disabled={auditingWorkerId === w.id}>
+                                    <Brain size={14} /> {auditingWorkerId === w.id ? "Auditando..." : "Auditar con IA"}
+                                  </button>
+                                )}
                               </div>
                               {user.role === "ADMIN" && (
                                 <div style={{display: "flex", gap: "6px"}}>
@@ -1137,7 +1439,7 @@ function App() {
                       const targetWorker = workers.find(w => w.id === doc.patient_id);
                       const workerName = targetWorker ? `${targetWorker.last_name}, ${targetWorker.first_name}` : `ID: ${doc.patient_id}`;
                       const uploader = systemUsers.find(u => u.id === doc.uploaded_by);
-                      const uploaderEmail = uploader ? uploader.email : `ID: ${doc.uploaded_by}`;
+                      const uploaderName = uploader ? uploader.username : `ID: ${doc.uploaded_by}`;
                       
                       return (
                         <div key={doc.id} style={{...styles.medicalCard, borderLeft: "4px solid #3b82f6"}} className="card-interactive">
@@ -1147,15 +1449,22 @@ function App() {
                           </div>
                           <div style={styles.cardDetails}>
                             <div style={styles.detailRow}><User size={14} color="#3b82f6" /> <span><strong>Trabajador:</strong> {workerName}</span></div>
+                            <div style={styles.detailRow}><CreditCard size={14} color="#3b82f6" /> <span><strong>Cédula:</strong> {targetWorker ? targetWorker.cedula : "N/D"}</span></div>
                             <div style={styles.detailRow}><FolderArchive size={14} color="#3b82f6" /> <span><strong>Ubicación Física:</strong> Carpeta Nro. {doc.folder_number || "S/N"}</span></div>
                             <div style={styles.detailRow}><Clock size={14} color="#3b82f6" /> <span><strong>Digitalizado el:</strong> {new Date(doc.uploaded_at).toLocaleDateString()}</span></div>
                             <div style={styles.detailRow}><CheckCircle size={14} color="#3b82f6" /> <span><strong>Estatus:</strong> {doc.document_status}</span></div>
-                            <div style={styles.detailRow}><User size={14} color="#3b82f6" /> <span><strong>Por:</strong> {uploaderEmail}</span></div>
+                            <div style={styles.detailRow}><User size={14} color="#3b82f6" /> <span><strong>Por:</strong> {uploaderName}</span></div>
                           </div>
                           <div style={{...styles.cardActionsBar, marginTop: "10px", paddingTop: "10px"}}>
                             <a href={`/${doc.file_path}`} target="_blank" rel="noreferrer" style={styles.btnDocLink} className="btn-interactive">
                               <Eye size={14} /> Ver PDF
                             </a>
+                            {user.role === "ADMIN" && (
+                              <div style={{display: "flex", gap: "6px"}}>
+                                <button onClick={() => handleOpenEditDoc(doc)} style={styles.btnActionIcon} className="btn-interactive btn-info" title="Modificar Metadata"><Edit size={14} /></button>
+                                <button onClick={() => handleDeleteGlobalDocument(doc.id)} style={styles.btnActionIcon} className="btn-interactive btn-danger" title="Eliminar Documento"><Trash2 size={14} /></button>
+                              </div>
+                            )}
                           </div>
                         </div>
                       );
@@ -1227,9 +1536,14 @@ function App() {
                             </div>
                             <div style={{display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "8px"}}>
                                <span style={{backgroundColor: lColor.bg, color: lColor.color, padding: "4px 8px", borderRadius: "4px", fontSize: "11px", fontWeight: "bold"}}>{lColor.label}</span>
-                               {loan.status === "ACTIVO" && (
-                                 <button onClick={() => handleReturnLoan(loan.id)} style={styles.btnActionSecondary} className="btn-interactive btn-info">Devolución</button>
-                               )}
+                               <div style={{display: "flex", gap: "6px"}}>
+                                 {loan.status === "ACTIVO" && (
+                                   <button onClick={() => handleReturnLoan(loan.id)} style={styles.btnActionSecondary} className="btn-interactive btn-info">Devolución</button>
+                                 )}
+                                 {user.role === "ADMIN" && (
+                                   <button onClick={() => handleDeleteLoan(loan.id)} style={styles.btnActionIcon} className="btn-interactive btn-danger" title="Eliminar Registro"><Trash2 size={14} /></button>
+                                 )}
+                               </div>
                             </div>
                           </div>
                         );
@@ -1243,7 +1557,7 @@ function App() {
             {/* PESTAÑA 3: ALERTAS VISUALES DINÁMICAS */}
             {activeTab === "calendar" && (
               <div style={{display: "flex", flexDirection: "column", gap: "25px"}}>
-                <div style={{display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "15px"}}>
+                <div style={{display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "15px"}}>
                   <div style={{backgroundColor: "#0f172a", padding: "15px", borderRadius: "12px", borderTop: "4px solid #ef4444"}}>
                     <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", color: "#94a3b8", fontSize: "13px"}}><span>Vencidos</span><ShieldAlert size={16} color="#ef4444"/></div>
                     <h3 style={{margin: "5px 0 0 0", color: "#fff", fontSize: "28px"}}>{overdueAlerts.length}</h3>
@@ -1251,10 +1565,6 @@ function App() {
                   <div style={{backgroundColor: "#0f172a", padding: "15px", borderRadius: "12px", borderTop: "4px solid #f59e0b"}}>
                     <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", color: "#94a3b8", fontSize: "13px"}}><span>Por Vencer</span><Clock size={16} color="#f59e0b"/></div>
                     <h3 style={{margin: "5px 0 0 0", color: "#fff", fontSize: "28px"}}>{dueSoonAlerts.length}</h3>
-                  </div>
-                  <div style={{backgroundColor: "#0f172a", padding: "15px", borderRadius: "12px", borderTop: "4px solid #3b82f6"}}>
-                    <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", color: "#94a3b8", fontSize: "13px"}}><span>Solicitudes</span><Users size={16} color="#3b82f6"/></div>
-                    <h3 style={{margin: "5px 0 0 0", color: "#fff", fontSize: "28px"}}>{pendingRequestAlerts.length}</h3>
                   </div>
                   <div style={{backgroundColor: "#0f172a", padding: "15px", borderRadius: "12px", borderTop: "4px solid #64748b"}}>
                     <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", color: "#94a3b8", fontSize: "13px"}}><span>Expurgos</span><FileText size={16} color="#64748b"/></div>
@@ -1268,7 +1578,6 @@ function App() {
                     <option value="TODAS">Todos los tipos</option>
                     <option value="VENCIDO">Préstamos Vencidos</option>
                     <option value="POR_VENCER">Próximos a Vencer</option>
-                    <option value="PENDIENTE">Solicitudes</option>
                     <option value="EXPURGO">Expurgos Legales</option>
                   </select>
                   <select value={alertPriorityFilter} onChange={e=>setAlertPriorityFilter(e.target.value)} style={{...styles.formInput, width: "180px", padding: "6px"}} className="input-interactive">
