@@ -6,7 +6,7 @@ import {
   MapPin, CreditCard, Bot, Send, ShieldAlert,
   Printer, FileDown, FileSpreadsheet, Paperclip, Eye, Trash2,
   PieChart, Settings, Images, Clock, Upload, File, ExternalLink, CheckCircle, Users,
-  ArrowRightLeft, AlertCircle, QrCode, Brain, Briefcase
+  ArrowRightLeft, AlertCircle, QrCode, Brain, Briefcase, Sun, Moon
 } from "lucide-react";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
@@ -14,6 +14,24 @@ import * as XLSX from "xlsx";
 
 // --- ESTILOS GLOBALES ---
 const globalCss = `
+  /* MEJORA 2: VARIABLES CSS DE TEMA (Modo Oscuro por defecto = diseño original idéntico) */
+  :root {
+    --bg-app: #0f172a;
+    --bg-card: #1e293b;
+    --bg-input: #0f172a;
+    --text-main: #f1f5f9;
+    --text-sub: #94a3b8;
+    --border-color: #334155;
+  }
+  .theme-light {
+    --bg-app: #f8fafc;
+    --bg-card: #ffffff;
+    --bg-input: #ffffff;
+    --text-main: #0f172a;
+    --text-sub: #475569;
+    --border-color: #cbd5e1;
+  }
+
   .btn-interactive { transition: all 0.2s ease-in-out; transform-origin: center; }
   .btn-interactive:hover { transform: scale(1.03); filter: brightness(1.15); box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 10; }
   .btn-interactive:active { transform: scale(0.97); }
@@ -23,7 +41,7 @@ const globalCss = `
   .btn-info:hover { color: #fff !important; background-color: #3b82f6 !important; }
 
   .card-interactive { transition: all 0.3s ease; border-left: 4px solid #0d9488; }
-  .card-interactive:hover { transform: translateX(6px); background-color: #1e293b !important; box-shadow: 0 8px 20px rgba(0,0,0,0.4); border-left: 4px solid #34d399; }
+  .card-interactive:hover { transform: translateX(6px); background-color: var(--bg-card) !important; box-shadow: 0 8px 20px rgba(0,0,0,0.4); border-left: 4px solid #34d399; }
   
   .input-interactive { transition: all 0.3s ease; box-sizing: border-box; }
   .input-interactive:focus { border-color: #0d9488 !important; box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.25); outline: none; transform: scale(1.01); }
@@ -51,8 +69,8 @@ const globalCss = `
   }
 
   ::-webkit-scrollbar { width: 8px; }
-  ::-webkit-scrollbar-track { background: #0f172a; }
-  ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg-app); }
+  ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
   ::-webkit-scrollbar-thumb:hover { background: #475569; }
 
   /* FASE 2: Personalidad visual de los botones "Auditar con IA" y "Ficha" */
@@ -87,12 +105,12 @@ const DonutChart = ({ data, title }) => {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "15px", flex: 1, backgroundColor: "#0f172a", padding: "20px", borderRadius: "12px", border: "1px dashed #334155", position: "relative" }}>
-      <h4 style={{ margin: 0, color: "#fff", fontSize: "15px" }}>{title}</h4>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "15px", flex: 1, backgroundColor: "var(--bg-app)", padding: "20px", borderRadius: "12px", border: "1px dashed var(--border-color)", position: "relative" }}>
+      <h4 style={{ margin: 0, color: "var(--text-main)", fontSize: "15px" }}>{title}</h4>
       
       <div style={{ position: "relative", width: "170px", height: "180px" }}>
         <svg viewBox="0 0 42 42" width="100%" height="100%" style={{ transform: "rotate(-90deg)", filter: "drop-shadow(0px 6px 8px rgba(0,0,0,0.5))" }}>
-          <circle cx="21" cy="21" r={radius} fill="transparent" stroke="#1e293b" strokeWidth="5" />
+          <circle cx="21" cy="21" r={radius} fill="transparent" stroke="var(--bg-card)" strokeWidth="5" />
           {data.map(slice => {
             const percent = (slice.value / safeTotal) * 100;
             const dashArray = animated ? `${percent} ${100 - percent}` : `0 100`;
@@ -114,10 +132,10 @@ const DonutChart = ({ data, title }) => {
           })}
         </svg>
         <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", textAlign: "center", pointerEvents: "none" }}>
-          <span style={{ fontSize: "24px", fontWeight: "bold", color: "#fff" }}>
+          <span style={{ fontSize: "24px", fontWeight: "bold", color: "var(--text-main)" }}>
             {hoveredSlice ? hoveredSlice.value : total}
           </span>
-          <span style={{ fontSize: "11px", color: "#94a3b8", display: "block" }}>
+          <span style={{ fontSize: "11px", color: "var(--text-sub)", display: "block" }}>
             {hoveredSlice ? "Selección" : "Total"}
           </span>
         </div>
@@ -142,6 +160,16 @@ const DonutChart = ({ data, title }) => {
 };
 
 // --- APP PRINCIPAL ---
+// FASE 2/3: CATÁLOGOS DE PERMISOS GRANULARES
+const ALL_TABS_OPTIONS = [
+  { id: "archive", label: "Digitalización" },
+  { id: "loans", label: "Préstamos" },
+  { id: "calendar", label: "Alertas" },
+  { id: "stats", label: "Estadísticas" },
+  { id: "ai", label: "Asistente IA" },
+];
+const ALL_WORK_STATUS_OPTIONS = ["ACTIVO", "EGRESADO", "SEGURO SOCIAL", "JUBILADO", "VACACIONES", "FALLECIDO"];
+
 function App() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -158,6 +186,7 @@ function App() {
   // FORMULARIO DIGITALIZACION
   const [editingWorkerId, setEditingWorkerId] = useState(null);
   const [isAutoRegistering, setIsAutoRegistering] = useState(false); // <-- FASE 1: Auto-Registro Inteligente con IA
+  const [theme, setTheme] = useState(() => localStorage.getItem("theme") || "dark"); // <-- FASE 1: Modo Claro/Oscuro
   const [autoRegisterSuccessMsg, setAutoRegisterSuccessMsg] = useState("");
   const autoRegisterInputRef = useRef(null);
   const [firstName, setFirstName] = useState("");
@@ -188,6 +217,13 @@ function App() {
   const [newUserPassword, setNewUserPassword] = useState("");
   const [newUserRole, setNewUserRole] = useState("GUEST");
   const [userSuccessMsg, setUserSuccessMsg] = useState(""); // <-- Banner de éxito interno (reemplaza alert nativo)
+  const [showEditUserModal, setShowEditUserModal] = useState(false); // <-- FASE 2: Edición de usuario y permisos
+  const [editingUser, setEditingUser] = useState(null);
+  const [editUserRole, setEditUserRole] = useState("GUEST");
+  const [editUserTabs, setEditUserTabs] = useState([]);
+  const [editUserWorkStatuses, setEditUserWorkStatuses] = useState([]);
+  const [editUserName, setEditUserName] = useState(""); // <-- MEJORA 1: Edición de username
+  const [editUserPassword, setEditUserPassword] = useState(""); // <-- MEJORA 1: Nueva contraseña (opcional)
 
   // ESTADOS REALES DE PRÉSTAMOS
   const [loans, setLoans] = useState([]);
@@ -294,6 +330,13 @@ function App() {
     } catch (err) { handleLogout(); }
   };
 
+  // FASE 1: TOGGLE DE MODO CLARO / OSCURO
+  const handleToggleTheme = () => {
+    const newTheme = theme === "dark" ? "light" : "dark";
+    setTheme(newTheme);
+    localStorage.setItem("theme", newTheme);
+  };
+
   const handleLogout = () => {
     localStorage.removeItem("token");
     setUser(null); setWorkers([]); setRecordsLoaded(false); setChatHistory([]);
@@ -336,6 +379,55 @@ function App() {
   };
 
   const handleOpenUserModal = () => { setShowUserModal(true); fetchSystemUsers(); };
+
+  // FASE 2: EDICIÓN DE USUARIO Y PERMISOS GRANULARES
+  const handleOpenEditUser = (su) => {
+    setEditingUser(su);
+    setEditUserRole(su.role || "GUEST");
+    setEditUserTabs(Array.isArray(su.permissions?.tabs) ? su.permissions.tabs : ALL_TABS_OPTIONS.map(t => t.id));
+    setEditUserWorkStatuses(Array.isArray(su.permissions?.allowed_work_statuses) ? su.permissions.allowed_work_statuses : ALL_WORK_STATUS_OPTIONS);
+    setEditUserName(su.username || ""); // <-- MEJORA 1
+    setEditUserPassword(""); // <-- MEJORA 1: siempre inicia en blanco (opcional)
+    setShowEditUserModal(true);
+  };
+
+  const handleCloseEditUser = () => {
+    setShowEditUserModal(false); setEditingUser(null); setEditUserRole("GUEST"); setEditUserTabs([]); setEditUserWorkStatuses([]);
+    setEditUserName(""); setEditUserPassword(""); // <-- MEJORA 1
+  };
+
+  const toggleEditUserTab = (tabId) => {
+    setEditUserTabs(prev => prev.includes(tabId) ? prev.filter(t => t !== tabId) : [...prev, tabId]);
+  };
+
+  const toggleEditUserWorkStatus = (status) => {
+    setEditUserWorkStatuses(prev => prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status]);
+  };
+
+  const handleUpdateUser = async (e) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    if (!editUserName.trim()) return showToast("El nombre de usuario no puede estar vacío.", "warning");
+    try {
+      const payload = {
+        username: editUserName.trim(), // <-- MEJORA 1
+        role: editUserRole,
+        permissions: editUserRole === "GUEST" ? { tabs: editUserTabs, allowed_work_statuses: editUserWorkStatuses } : null
+      };
+      if (editUserPassword) payload.password = editUserPassword; // <-- MEJORA 1: solo si se escribió una nueva clave
+      const res = await axios.put(`/users/${editingUser.id}`, payload, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } });
+      // MEJORA 1 (Nota de estado): si el ADMIN se edita a sí mismo, refresca el estado local "user" al instante
+      if (user?.id === editingUser.id) {
+        setUser(res.data);
+      }
+      setUserSuccessMsg("Usuario actualizado exitosamente.");
+      setTimeout(() => setUserSuccessMsg(""), 4000);
+      fetchSystemUsers();
+      handleCloseEditUser();
+    } catch (err) {
+      showToast("Error al actualizar el usuario.", "error");
+    }
+  };
 
   // EXPEDIENTES (BÓVEDA DIGITAL)
   const fetchWorkers = async () => {
@@ -511,7 +603,7 @@ function App() {
       };
 
       setGlobalDocsList(prev => [newScan, ...prev]);
-      setDigitalizationHistory(prev => [{ id: Date.now(), transcriptor: user.email, date: new Date().toLocaleString(), doc: selectedScanCategory, worker: target ? `${target.last_name}, ${target.first_name}` : "S/N" }, ...prev]);
+      setDigitalizationHistory(prev => [{ id: Date.now(), transcriptor: user.username, date: new Date().toLocaleString(), doc: selectedScanCategory, worker: target ? `${target.last_name}, ${target.first_name}` : "S/N" }, ...prev]);
       showToast("Foliado físico digitalizado con éxito mediante ADF.", "success");
     }, 2500);
   };
@@ -822,6 +914,11 @@ function App() {
   };
 
   // --- FILTROS DE EXPEDIENTES (CONSOLIDADOS) ---
+  // FASE 3: Estatus laborales visibles según permisos granulares del usuario GUEST
+  const visibleWorkStatusOptions = (user?.role === "GUEST" && Array.isArray(user?.permissions?.allowed_work_statuses))
+    ? ALL_WORK_STATUS_OPTIONS.filter(s => user?.permissions.allowed_work_statuses.includes(s))
+    : ALL_WORK_STATUS_OPTIONS;
+
   const filteredWorkersList = workers.filter((w) => {
     const query = searchQuery.toLowerCase();
     return (`${w.first_name} ${w.last_name}`.toLowerCase().includes(query) || (w.cedula && w.cedula.toLowerCase().includes(query)));
@@ -965,15 +1062,15 @@ function App() {
   return (
     <>
       <style>{globalCss}</style>
-      <div style={styles.appContainer}>
+      <div style={styles.appContainer} className={theme === "light" ? "theme-light" : ""}>
         
         {/* === SATEFUL TOAST NOTIFICATION === */}
         {toast.isOpen && (
           <div style={{
-            position: "fixed", bottom: "25px", right: "25px", backgroundColor: "#1e293b",
+            position: "fixed", bottom: "25px", right: "25px", backgroundColor: "var(--bg-card)",
             borderLeft: `5px solid ${toast.type === "success" ? "#10b981" : toast.type === "error" ? "#ef4444" : toast.type === "warning" ? "#f59e0b" : "#3b82f6"}`,
             padding: "15px 20px", borderRadius: "8px", boxShadow: "0 10px 25px rgba(0,0,0,0.5)", zIndex: 10000,
-            display: "flex", alignItems: "center", gap: "12px", color: "#fff", minWidth: "320px", justifyContent: "space-between"
+            display: "flex", alignItems: "center", gap: "12px", color: "var(--text-main)", minWidth: "320px", justifyContent: "space-between"
           }} className="modal-animate">
             <div style={{display: "flex", alignItems: "center", gap: "10px"}}>
               {toast.type === "success" && <CheckCircle size={18} color="#10b981" />}
@@ -982,7 +1079,7 @@ function App() {
               {toast.type === "info" && <File size={18} color="#3b82f6" />}
               <span style={{fontSize: "14px", fontWeight: "500"}}>{toast.message}</span>
             </div>
-            <button onClick={() => setToast(prev => ({ ...prev, isOpen: false }))} style={{background: "none", border: "none", color: "#94a3b8", cursor: "pointer", display: "flex"}}>
+            <button onClick={() => setToast(prev => ({ ...prev, isOpen: false }))} style={{background: "none", border: "none", color: "var(--text-sub)", cursor: "pointer", display: "flex"}}>
               <X size={16} />
             </button>
           </div>
@@ -999,7 +1096,7 @@ function App() {
                 </div>
                 <button onClick={handleCloseConfirm} style={styles.btnCancelEdit} className="btn-interactive"><X size={18} /></button>
               </div>
-              <p style={{color: "#94a3b8", fontSize: "14px", margin: "10px 0", lineHeight: "1.5"}}>{confirm.message}</p>
+              <p style={{color: "var(--text-sub)", fontSize: "14px", margin: "10px 0", lineHeight: "1.5"}}>{confirm.message}</p>
               <div style={{display: "flex", gap: "10px", marginTop: "10px"}}>
                 <button onClick={handleCloseConfirm} style={{...styles.btnPrimary, backgroundColor: "#334155", color: "#fff"}} className="btn-interactive">Cancelar</button>
                 <button onClick={confirm.onConfirm} style={{...styles.btnPrimary, backgroundColor: "#ef4444"}} className="btn-interactive">Confirmar</button>
@@ -1021,11 +1118,11 @@ function App() {
               </div>
               <form onSubmit={handleUpdateDocument} style={{display: "flex", flexDirection: "column", gap: "12px", marginTop: "10px"}}>
                 <div style={styles.inputGroup}>
-                  <label style={{fontSize: "11px", color: "#94a3b8", marginLeft: "5px"}}>Nombre del Archivo</label>
+                  <label style={{fontSize: "11px", color: "var(--text-sub)", marginLeft: "5px"}}>Nombre del Archivo</label>
                   <input type="text" value={editDocFileName} onChange={(e) => setEditDocFileName(e.target.value)} style={styles.formInput} className="input-interactive" required />
                 </div>
                 <div style={styles.inputGroup}>
-                  <label style={{fontSize: "11px", color: "#94a3b8", marginLeft: "5px"}}>Categoría</label>
+                  <label style={{fontSize: "11px", color: "var(--text-sub)", marginLeft: "5px"}}>Categoría</label>
                   <select value={editDocCategory} onChange={(e) => setEditDocCategory(e.target.value)} style={styles.formInput} className="input-interactive">
                     <option value="Cédula">Cédula</option>
                     <option value="Título">Título</option>
@@ -1035,7 +1132,7 @@ function App() {
                   </select>
                 </div>
                 <div style={styles.inputGroup}>
-                  <label style={{fontSize: "11px", color: "#94a3b8", marginLeft: "5px"}}>Estado Documental</label>
+                  <label style={{fontSize: "11px", color: "var(--text-sub)", marginLeft: "5px"}}>Estado Documental</label>
                   <select value={editDocStatus} onChange={(e) => setEditDocStatus(e.target.value)} style={styles.formInput} className="input-interactive">
                     <option value="digitalizado">Digitalizado</option>
                     <option value="COMPLETO">Completo</option>
@@ -1051,26 +1148,91 @@ function App() {
           </div>
         )}
 
+        {/* FASE 2: MODAL DE EDICIÓN DE USUARIO Y PERMISOS GRANULARES */}
+        {showEditUserModal && editingUser && (
+          <div style={{...styles.modalOverlay, zIndex: 10005}}> {/* <-- Se abre sobre Gestión de Accesos (9999) */}
+            <div style={{...styles.modalContent, maxWidth: "500px"}} className="modal-animate">
+              <div style={styles.modalHeader}>
+                <div style={{display: "flex", alignItems: "center", gap: "10px"}}>
+                  <Edit size={20} color="#0d9488" />
+                  <h3 style={styles.modalTitle}>Editar Usuario: {editingUser.username}</h3>
+                </div>
+                <button onClick={handleCloseEditUser} style={styles.btnCancelEdit} className="btn-interactive"><X size={18} /></button>
+              </div>
+              <form onSubmit={handleUpdateUser} style={{display: "flex", flexDirection: "column", gap: "14px", marginTop: "10px"}}>
+                <div style={styles.inputGroup}>
+                  <label style={{fontSize: "11px", color: "var(--text-sub)", marginLeft: "5px"}}>Nombre de Usuario</label>
+                  <input type="text" value={editUserName} onChange={(e) => setEditUserName(e.target.value)} style={styles.formInput} className="input-interactive" required />
+                </div>
+                <div style={styles.inputGroup}>
+                  <label style={{fontSize: "11px", color: "var(--text-sub)", marginLeft: "5px"}}>Nueva Contraseña (opcional)</label>
+                  <input type="password" value={editUserPassword} onChange={(e) => setEditUserPassword(e.target.value)} style={styles.formInput} className="input-interactive" placeholder="Dejar en blanco para no modificarla" />
+                </div>
+                <div style={styles.inputGroup}>
+                  <label style={{fontSize: "11px", color: "var(--text-sub)", marginLeft: "5px"}}>Rol</label>
+                  <select value={editUserRole} onChange={(e) => setEditUserRole(e.target.value)} style={styles.formInput} className="input-interactive">
+                    <option value="GUEST">GUEST</option>
+                    <option value="ADMIN">ADMIN</option>
+                  </select>
+                </div>
+
+                {editUserRole === "GUEST" && (
+                  <>
+                    <div>
+                      <label style={{fontSize: "12px", color: "var(--text-sub)", fontWeight: "bold"}}>Pestañas Permitidas</label>
+                      <div style={{display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "8px"}}>
+                        {ALL_TABS_OPTIONS.map(t => (
+                          <label key={t.id} style={{display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "#e2e8f0", backgroundColor: "var(--bg-app)", padding: "6px 10px", borderRadius: "6px", border: "1px solid var(--border-color)", cursor: "pointer"}}>
+                            <input type="checkbox" checked={editUserTabs.includes(t.id)} onChange={() => toggleEditUserTab(t.id)} />
+                            {t.label}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style={{fontSize: "12px", color: "var(--text-sub)", fontWeight: "bold"}}>Estatus Laborales Permitidos</label>
+                      <div style={{display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "8px"}}>
+                        {ALL_WORK_STATUS_OPTIONS.map(s => (
+                          <label key={s} style={{display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "#e2e8f0", backgroundColor: "var(--bg-app)", padding: "6px 10px", borderRadius: "6px", border: "1px solid var(--border-color)", cursor: "pointer"}}>
+                            <input type="checkbox" checked={editUserWorkStatuses.includes(s)} onChange={() => toggleEditUserWorkStatus(s)} />
+                            {s}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                <div style={{display: "flex", gap: "10px", marginTop: "5px"}}>
+                  <button type="button" onClick={handleCloseEditUser} style={{...styles.btnPrimary, backgroundColor: "#334155", color: "#fff"}} className="btn-interactive">Cancelar</button>
+                  <button type="submit" style={styles.btnPrimary} className="btn-interactive">Guardar Cambios</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
 
         {/* === MODAL DE ARCHIVOS ESCANEADOS === */}
         {showDocModal && selectedWorker && (
           <div style={styles.modalOverlay}>
             <div style={styles.modalContent} className="modal-animate">
               <div style={styles.modalHeader}>
-                <div><h3 style={styles.modalTitle}>Archivos Escaneados</h3><p style={{margin: "3px 0 0 0", color: "#94a3b8", fontSize: "13px"}}>{selectedWorker.first_name} {selectedWorker.last_name}</p></div>
+                <div><h3 style={styles.modalTitle}>Archivos Escaneados</h3><p style={{margin: "3px 0 0 0", color: "var(--text-sub)", fontSize: "13px"}}>{selectedWorker.first_name} {selectedWorker.last_name}</p></div>
                 <button onClick={handleCloseDocs} style={styles.btnCancelEdit} className="btn-interactive"><X size={20} /></button>
               </div>
               {user?.role === "ADMIN" && (
                 <form onSubmit={handleUploadDoc} style={styles.uploadBox}>
                   <div style={{display: "flex", gap: "10px", alignItems: "center"}}>
                     <input type="text" placeholder="Descripción (opcional)" value={fileDesc} onChange={(e) => setFileDesc(e.target.value)} style={styles.formInput} className="input-interactive" />
-                    <input type="file" onChange={(e) => setFileUpload(e.target.files[0])} style={{color: "#94a3b8", fontSize: "13px", width: "180px"}} required />
+                    <input type="file" onChange={(e) => setFileUpload(e.target.files[0])} style={{color: "var(--text-sub)", fontSize: "13px", width: "180px"}} required />
                   </div>
                   {/* FASE 1: Toggle de Modo de Análisis IA */}
-                  <div style={{display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", color: "#94a3b8"}}>
+                  <div style={{display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", color: "var(--text-sub)"}}>
                     <Bot size={14} color="#0d9488" /> <span>Modo de Análisis:</span>
-                    <button type="button" onClick={() => setScanAnalysisMode("fast")} style={{padding: "4px 10px", borderRadius: "6px", border: "1px solid #334155", cursor: "pointer", fontSize: "12px", backgroundColor: scanAnalysisMode === "fast" ? "#0d9488" : "#1e293b", color: "#fff"}} className="btn-interactive">Rápido</button>
-                    <button type="button" onClick={() => setScanAnalysisMode("full")} style={{padding: "4px 10px", borderRadius: "6px", border: "1px solid #334155", cursor: "pointer", fontSize: "12px", backgroundColor: scanAnalysisMode === "full" ? "#0d9488" : "#1e293b", color: "#fff"}} className="btn-interactive">Completo</button>
+                    <button type="button" onClick={() => setScanAnalysisMode("fast")} style={{padding: "4px 10px", borderRadius: "6px", border: "1px solid var(--border-color)", cursor: "pointer", fontSize: "12px", backgroundColor: scanAnalysisMode === "fast" ? "#0d9488" : "var(--bg-card)", color: scanAnalysisMode === "fast" ? "#fff" : "var(--text-main)"}} className="btn-interactive">Rápido</button>
+                    <button type="button" onClick={() => setScanAnalysisMode("full")} style={{padding: "4px 10px", borderRadius: "6px", border: "1px solid var(--border-color)", cursor: "pointer", fontSize: "12px", backgroundColor: scanAnalysisMode === "full" ? "#0d9488" : "var(--bg-card)", color: scanAnalysisMode === "full" ? "#fff" : "var(--text-main)"}} className="btn-interactive">Completo</button>
                   </div>
                   <button type="submit" style={{...styles.btnPrimary, display: "flex", justifyContent: "center", gap: "8px"}} className="btn-interactive" disabled={isUploading}><Upload size={16} /> {isUploading ? "Analizando con IA..." : "Subir Escaneo"}</button>
                 </form>
@@ -1087,7 +1249,7 @@ function App() {
                         <div style={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
                           <div style={{display: "flex", alignItems: "center", gap: "10px"}}>
                             <File size={16} color="#38bdf8" />
-                            <span style={{fontSize: "14px", color: "#f1f5f9", fontWeight: "bold"}}>{doc.file_name}</span>
+                            <span style={{fontSize: "14px", color: "var(--text-main)", fontWeight: "bold"}}>{doc.file_name}</span>
                           </div>
                           <div style={{display: "flex", gap: "6px", alignItems: "center"}}>
                             <a href={`/${doc.file_path}`} target="_blank" rel="noreferrer" style={styles.btnDocLink} className="btn-interactive"><ExternalLink size={14} /> Ver</a>
@@ -1097,7 +1259,7 @@ function App() {
                           </div>
                         </div>
                         {/* FASE 3: Fila de metadata nativa debajo del título */}
-                        <div style={{display: "flex", flexWrap: "wrap", gap: "12px", fontSize: "11px", color: "#94a3b8", paddingLeft: "26px", borderTop: "1px dashed #1e293b", paddingTop: "6px"}}>
+                        <div style={{display: "flex", flexWrap: "wrap", gap: "12px", fontSize: "11px", color: "var(--text-sub)", paddingLeft: "26px", borderTop: "1px dashed var(--border-color)", paddingTop: "6px"}}>
                           <span>📁 <strong>Cat:</strong> {doc.category}</span>
                           <span>📦 <strong>Carpeta:</strong> {doc.folder_number || "S/N"}</span>
                           <span>Estatus: <strong style={{color: doc.document_status === "COMPLETO" || doc.document_status === "digitalizado" ? "#10b981" : "#f59e0b"}}>{doc.document_status}</strong></span>
@@ -1138,13 +1300,16 @@ function App() {
                 <button type="submit" style={{...styles.btnPrimary, width: "auto", display: "flex", gap: "5px", alignItems: "center"}} className="btn-interactive"><Plus size={16}/> Crear</button>
               </form>
               
-              <div style={{backgroundColor: "#0f172a", borderRadius: "8px", border: "1px solid #334155"}}>
-                <div style={{display: "flex", justifyContent: "space-between", padding: "12px 15px", borderBottom: "1px solid #334155", color: "#94a3b8", fontSize: "13px", fontWeight: "bold"}}><span style={{flex: 2}}>Usuario</span><span style={{flex: 1}}>Rol</span><span style={{flex: 1, textAlign: "right"}}>Acciones</span></div>
+              <div style={{backgroundColor: "var(--bg-app)", borderRadius: "8px", border: "1px solid var(--border-color)"}}>
+                <div style={{display: "flex", justifyContent: "space-between", padding: "12px 15px", borderBottom: "1px solid var(--border-color)", color: "var(--text-sub)", fontSize: "13px", fontWeight: "bold"}}><span style={{flex: 2}}>Usuario</span><span style={{flex: 1}}>Rol</span><span style={{flex: 1, textAlign: "right"}}>Acciones</span></div>
                 {systemUsers.map(su => (
-                  <div key={su.id} style={{display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 15px", borderBottom: "1px solid #1e293b"}}>
-                    <span style={{flex: 2, color: "#fff", display: "flex", alignItems: "center", gap: "8px"}}>{su.id === user.id ? <CheckCircle size={16} color="#10b981"/> : <User size={16} color="#94a3b8"/>} {su.username}</span>
+                  <div key={su.id} style={{display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 15px", borderBottom: "1px solid var(--border-color)"}}>
+                    <span style={{flex: 2, color: "var(--text-main)", display: "flex", alignItems: "center", gap: "8px"}}>{su.id === user.id ? <CheckCircle size={16} color="#10b981"/> : <User size={16} color="#94a3b8"/>} {su.username}</span>
                     <span style={{flex: 1}}><span style={{...styles.userRoleBadge, backgroundColor: su.role === "ADMIN" ? "#0369a1" : "#475569"}}>{su.role}</span></span>
-                    <div style={{flex: 1, textAlign: "right"}}><button onClick={() => handleDeleteUser(su.id)} style={{...styles.btnActionIcon, opacity: su.id === user.id ? 0.3 : 1}} className="btn-interactive btn-danger" disabled={su.id === user.id}><Trash2 size={14}/></button></div>
+                    <div style={{flex: 1, textAlign: "right", display: "flex", gap: "6px", justifyContent: "flex-end"}}>
+                      <button onClick={() => handleOpenEditUser(su)} style={styles.btnActionIcon} className="btn-interactive btn-info" title="Editar Usuario y Permisos"><Edit size={14}/></button>
+                      <button onClick={() => handleDeleteUser(su.id)} style={{...styles.btnActionIcon, opacity: su.id === user.id ? 0.3 : 1}} className="btn-interactive btn-danger" disabled={su.id === user.id}><Trash2 size={14}/></button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1183,7 +1348,7 @@ function App() {
           <div style={styles.dashboardContainer}>
             <header style={styles.header}>
               <div style={styles.brand}><FolderArchive size={28} color="#0d9488" /><span style={styles.brandText}>SAD-TH / ARCHIVO GENERAL</span></div>
-              <div style={styles.userInfo}><div style={styles.avatar}><User size={18} color="#0d9488" /></div><div style={styles.userDetail}><span style={styles.userName}>{user.email}</span><span style={styles.userRoleBadge}>{user.role}</span></div><button onClick={handleLogout} style={styles.btnLogout} className="btn-interactive" title="Cerrar Sesión"><LogOut size={18} /></button></div>
+              <div style={styles.userInfo}><div style={styles.avatar}><User size={18} color="#0d9488" /></div><div style={styles.userDetail}><span style={styles.userName}>{user.username}</span><span style={styles.userRoleBadge}>{user?.role}</span></div><button onClick={handleToggleTheme} style={styles.btnLogout} className="btn-interactive" title={theme === "dark" ? "Cambiar a Modo Claro" : "Cambiar a Modo Oscuro"}>{theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}</button><button onClick={handleLogout} style={styles.btnLogout} className="btn-interactive" title="Cerrar Sesión"><LogOut size={18} /></button></div>
             </header>
 
             {/* BARRA DE PESTAÑAS (Asistente IA deshabilitado visualmente) */}
@@ -1194,9 +1359,15 @@ function App() {
                 { id: "loans", icon: <ArrowRightLeft size={16} />, label: "Préstamos" },
                 { id: "calendar", icon: <ShieldAlert size={16} />, label: "Alertas" },
                 { id: "stats", icon: <PieChart size={16} />, label: "Estadísticas" },
-                ...(user.role === "ADMIN" ? [{ id: "settings", icon: <Settings size={16} />, label: "Configuración" }] : [])
+                ...(user?.role === "ADMIN" ? [{ id: "settings", icon: <Settings size={16} />, label: "Configuración" }] : [])
                 // Omitimos "ai" visualmente, toda su lógica y estados permanecen intactos abajo
-              ].map((tab) => (
+              ].filter((tab) => {
+                // FASE 3: Si el usuario es GUEST y tiene permisos granulares configurados, restringe las pestañas visibles
+                if (user?.role === "GUEST" && Array.isArray(user?.permissions?.tabs)) {
+                  return user?.permissions.tabs.includes(tab.id);
+                }
+                return true;
+              }).map((tab) => (
                 <button key={tab.id} onClick={() => setActiveTab(tab.id)} className="tab-item"
                   style={{ ...styles.tabLink, borderBottom: activeTab === tab.id ? "3px solid #0d9488" : "3px solid transparent", color: activeTab === tab.id ? "#fff" : "#64748b" }} >
                   <span style={{marginRight: "6px", display: "flex"}}>{tab.icon}</span> {tab.label}
@@ -1207,9 +1378,9 @@ function App() {
             {/* PESTAÑA 1: DIGITALIZACIÓN */}
             {activeTab === "archive" && (
               <div style={styles.splitLayout}>
-                {user.role === "ADMIN" ? (
+                {user?.role === "ADMIN" ? (
                   <div style={styles.leftCol}>
-                    <form onSubmit={handleDigitalize} style={{...styles.medicalForm, border: editingWorkerId ? "2px solid #0d9488" : "1px solid #1e293b"}}>
+                    <form onSubmit={handleDigitalize} style={{...styles.medicalForm, border: editingWorkerId ? "2px solid #0d9488" : "1px solid var(--border-color)"}}>
                       <div style={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
                         <h3 style={{...styles.sectionTitle, margin: 0, color: editingWorkerId ? "#0d9488" : "#fff"}}>{editingWorkerId ? <Edit size={18} style={{marginRight: "8px"}} /> : <Plus size={18} style={{marginRight: "8px"}} />} {editingWorkerId ? `Modificando ID: ${editingWorkerId}` : "Ingreso de Carpeta"}</h3>
                         {editingWorkerId && (<button type="button" onClick={handleCancelEdit} style={styles.btnCancelEdit} className="btn-interactive btn-danger"><X size={16} /></button>)}
@@ -1231,7 +1402,7 @@ function App() {
                         <div style={styles.inputGroup}>
                           <label style={{fontSize:"11px", color:"#94a3b8", marginLeft:"5px"}}>Estatus Laboral</label>
                           <select value={workStatus} onChange={(e) => setWorkStatus(e.target.value)} style={styles.formInput} className="input-interactive">
-                            <option value="ACTIVO">ACTIVO</option><option value="EGRESADO">EGRESADO</option><option value="SEGURO SOCIAL">SEGURO SOCIAL</option><option value="JUBILADO">JUBILADO</option><option value="VACACIONES">VACACIONES</option><option value="FALLECIDO">FALLECIDO</option>
+                            {visibleWorkStatusOptions.map(s => <option key={s} value={s}>{s}</option>)}
                           </select>
                         </div>
                         <div style={styles.inputGroup}>
@@ -1276,7 +1447,7 @@ function App() {
 
                   <div style={styles.patientsFeed}>
                     {!recordsLoaded ? (
-                      <div style={styles.placeholderBox}><FolderArchive size={40} color="#334155" style={{marginBottom: "10px"}} /><p style={{margin: 0, color: "#94a3b8", fontWeight: "bold"}}>Bóveda Cerrada</p></div>
+                      <div style={styles.placeholderBox}><FolderArchive size={40} color="#334155" style={{marginBottom: "10px"}} /><p style={{margin: 0, color: "var(--text-sub)", fontWeight: "bold"}}>Bóveda Cerrada</p></div>
                     ) : filteredWorkersList.map((w) => {
                         const fullMatch = w.medical_history ? w.medical_history.match(/^\[ESTADO: (.*?)\] \[DOCS: (.*?)\] - (.*)$/) : null;
                         const partialMatch = w.medical_history ? w.medical_history.match(/^\[ESTADO: (.*?)\] - (.*)$/) : null;
@@ -1312,13 +1483,13 @@ function App() {
                                 <button onClick={() => handleOpenDocs(w)} style={styles.btnActionSecondary} className="btn-interactive btn-info" title="Ver Archivos Físicos"><Paperclip size={14} /> Archivos</button>
                                 <button onClick={() => handlePrintCard(w)} style={styles.btnActionSecondary} className="btn-interactive btn-print-ficha" title="Imprimir Plantilla"><Printer size={14} /> Ficha</button>
                                 <button onClick={() => handleExportIndividualPDF(w)} style={styles.btnActionSecondary} className="btn-interactive btn-pdf-soft" title="Descargar PDF Indiv."><FileDown size={14} /> PDF</button>
-                                {user.role === "ADMIN" && (
+                                {user?.role === "ADMIN" && (
                                   <button onClick={() => handleAuditWorker(w.id)} style={styles.btnActionSecondary} className="btn-interactive btn-ai-audit" title="Auditar Expediente con IA" disabled={auditingWorkerId === w.id}>
                                     <Brain size={14} /> {auditingWorkerId === w.id ? "Auditando..." : "Auditar con IA"}
                                   </button>
                                 )}
                               </div>
-                              {user.role === "ADMIN" && (
+                              {user?.role === "ADMIN" && (
                                 <div style={{display: "flex", gap: "6px"}}>
                                   <button onClick={() => handleSelectEdit(w)} style={styles.btnActionIcon} className="btn-interactive btn-info"><Edit size={14} /></button>
                                   <button onClick={() => handleDeleteWorker(w.id)} style={styles.btnActionIcon} className="btn-interactive btn-danger"><Trash2 size={14} /></button>
@@ -1343,8 +1514,8 @@ function App() {
                       <Upload size={18} style={{marginRight: "8px"}} /> Terminal de Escáner
                     </h3>
                     
-                    <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", backgroundColor: "#0f172a", padding: "10px 15px", borderRadius: "8px", border: "1px solid #334155"}}>
-                      <span style={{fontSize: "13px", color: "#94a3b8"}}>Estado del Dispositivo:</span>
+                    <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", backgroundColor: "var(--bg-app)", padding: "10px 15px", borderRadius: "8px", border: "1px solid var(--border-color)"}}>
+                      <span style={{fontSize: "13px", color: "var(--text-sub)"}}>Estado del Dispositivo:</span>
                       <span style={{fontSize: "12px", padding: "3px 10px", borderRadius: "10px", fontWeight: "bold", backgroundColor: scannerConnected ? "rgba(16, 185, 129, 0.15)" : "rgba(239, 68, 68, 0.15)", color: scannerConnected ? "#34d399" : "#f87171"}}>
                         {scannerConnected ? "CONECTADO" : "DESCONECTADO"}
                       </span>
@@ -1359,16 +1530,16 @@ function App() {
                       </button>
                     </div>
 
-                    <div style={{position: "relative", height: "160px", backgroundColor: "#0f172a", borderRadius: "8px", border: "1px dashed #334155", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", overflow: "hidden"}}>
+                    <div style={{position: "relative", height: "160px", backgroundColor: "var(--bg-app)", borderRadius: "8px", border: "1px dashed var(--border-color)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", overflow: "hidden"}}>
                       {isScanning ? (
                         <>
                           <Clock size={32} color="#10b981" className="btn-interactive" style={{animation: "spin 2s linear infinite"}} />
-                          <span style={{fontSize: "13px", color: "#94a3b8", marginTop: "10px"}}>ADF Procesando Hojas...</span>
+                          <span style={{fontSize: "13px", color: "var(--text-sub)", marginTop: "10px"}}>ADF Procesando Hojas...</span>
                         </>
                       ) : isScanningQR ? (
                         <>
                           <QrCode size={32} color="#10b981" style={{animation: "pulse 1.5s infinite"}} />
-                          <span style={{fontSize: "13px", color: "#94a3b8", marginTop: "10px"}}>Escaneando Código QR de Carpeta...</span>
+                          <span style={{fontSize: "13px", color: "var(--text-sub)", marginTop: "10px"}}>Escaneando Código QR de Carpeta...</span>
                         </>
                       ) : (
                         <>
@@ -1384,8 +1555,8 @@ function App() {
                   </div>
 
                   {/* FASE 1: ACTUALIZACIÓN FORM DATA DEL MANUAL CON METADATA NATIVA */}
-                  <form onSubmit={handleManualUploadPDF} style={{...styles.medicalForm, marginTop: "20px", border: "1px solid #1e293b"}}>
-                    <h4 style={{margin: "0 0 10px 0", color: "#fff", fontSize: "14px"}}>Asociación Manual de PDF</h4>
+                  <form onSubmit={handleManualUploadPDF} style={{...styles.medicalForm, marginTop: "20px", border: "1px solid var(--border-color)"}}>
+                    <h4 style={{margin: "0 0 10px 0", color: "var(--text-main)", fontSize: "14px"}}>Asociación Manual de PDF</h4>
                     <select value={selectedPatientForScan} onChange={e=>setSelectedPatientForScan(e.target.value)} style={styles.formInput} className="input-interactive" required>
                       <option value="">Seleccionar Expediente...</option>
                       {workers.map(w => (
@@ -1403,7 +1574,7 @@ function App() {
                       </select>
                       <input type="text" placeholder="Carpeta Nro." value={scanFolderNum} onChange={e=>setScanFolderNum(e.target.value)} style={styles.formInput} className="input-interactive" required />
                     </div>
-                    <input type="file" onChange={e=>setFileUpload(e.target.files[0])} style={{color: "#94a3b8", fontSize: "13px"}} required />
+                    <input type="file" onChange={e=>setFileUpload(e.target.files[0])} style={{color: "var(--text-sub)", fontSize: "13px"}} required />
                     <button type="submit" style={styles.btnPrimary} className="btn-interactive" disabled={isUploading}>Indexar Documento PDF</button>
                   </form>
                 </div>
@@ -1459,7 +1630,7 @@ function App() {
                             <a href={`/${doc.file_path}`} target="_blank" rel="noreferrer" style={styles.btnDocLink} className="btn-interactive">
                               <Eye size={14} /> Ver PDF
                             </a>
-                            {user.role === "ADMIN" && (
+                            {user?.role === "ADMIN" && (
                               <div style={{display: "flex", gap: "6px"}}>
                                 <button onClick={() => handleOpenEditDoc(doc)} style={styles.btnActionIcon} className="btn-interactive btn-info" title="Modificar Metadata"><Edit size={14} /></button>
                                 <button onClick={() => handleDeleteGlobalDocument(doc.id)} style={styles.btnActionIcon} className="btn-interactive btn-danger" title="Eliminar Documento"><Trash2 size={14} /></button>
@@ -1473,10 +1644,10 @@ function App() {
 
                   {/* Historial de Digitalización en vivo */}
                   <div style={{...styles.medicalForm, marginTop: "20px"}}>
-                    <h4 style={{margin: 0, color: "#fff", display: "flex", alignItems: "center", gap: "8px"}}><Clock size={16} color="#10b981"/> Historial de Digitalización Reciente</h4>
+                    <h4 style={{margin: 0, color: "var(--text-main)", display: "flex", alignItems: "center", gap: "8px"}}><Clock size={16} color="#10b981"/> Historial de Digitalización Reciente</h4>
                     <div style={{display: "flex", flexDirection: "column", gap: "8px", marginTop: "10px"}}>
                       {digitalizationHistory.map(h => (
-                        <div key={h.id} style={{fontSize: "12.5px", color: "#94a3b8", display: "flex", justifyContent: "space-between", borderBottom: "1px solid #1e293b", paddingBottom: "5px"}}>
+                        <div key={h.id} style={{fontSize: "12.5px", color: "var(--text-sub)", display: "flex", justifyContent: "space-between", borderBottom: "1px solid var(--border-color)", paddingBottom: "5px"}}>
                           <span>{h.date} - <strong>{h.transcriptor}</strong> digitalizó <strong>{h.doc}</strong> de {h.worker}</span>
                         </div>
                       ))}
@@ -1491,7 +1662,7 @@ function App() {
             {activeTab === "loans" && (
               <div style={styles.splitLayout}>
                 <div style={styles.leftCol}>
-                  <form onSubmit={handleCreateLoan} style={{...styles.medicalForm, border: "1px solid #1e293b"}}>
+                  <form onSubmit={handleCreateLoan} style={{...styles.medicalForm, border: "1px solid var(--border-color)"}}>
                     <h3 style={styles.sectionTitle}><RefreshCw size={18} style={{marginRight: "8px"}} /> Registrar Salida</h3>
                     <div style={styles.inputGroup}><label style={styles.inputLabel}>Funcionario Solicitante / Dpto.</label><input type="text" placeholder="Ej: Dr. Ramírez (Legal)" value={borrowerName} onChange={(e) => setBorrowerName(e.target.value)} style={styles.formInput} className="input-interactive" required /></div>
                     <div style={styles.inputGroup}>
@@ -1509,8 +1680,8 @@ function App() {
                     </div>
                     <button type="submit" style={styles.btnPrimary} className="btn-interactive">Procesar Préstamo</button>
                   </form>
-                  <div style={{...styles.medicalForm, marginTop: "20px", border: "1px solid #1e293b"}}>
-                    <h4 style={{margin: "0 0 10px 0", color: "#fff", fontSize: "14px"}}>Filtros Avanzados</h4>
+                  <div style={{...styles.medicalForm, marginTop: "20px", border: "1px solid var(--border-color)"}}>
+                    <h4 style={{margin: "0 0 10px 0", color: "var(--text-main)", fontSize: "14px"}}>Filtros Avanzados</h4>
                     <input type="text" placeholder="Filtrar por solicitante..." value={loanSearchQuery} onChange={(e) => setLoanSearchQuery(e.target.value)} style={{...styles.formInput, marginBottom: "10px"}} className="input-interactive" />
                     <select value={loanStatusFilter} onChange={(e) => setLoanStatusFilter(e.target.value)} style={styles.formInput} className="input-interactive">
                       <option value="TODOS">Todos los Estados</option>
@@ -1520,7 +1691,7 @@ function App() {
                   </div>
                 </div>
                 <div style={styles.rightCol}>
-                  <h3 style={{margin: "0 0 15px 0", fontSize: "16px", color: "#fff", display: "flex", alignItems: "center"}}><Clock size={18} style={{marginRight: "8px"}} /> Bitácora Histórica</h3>
+                  <h3 style={{margin: "0 0 15px 0", fontSize: "16px", color: "var(--text-main)", display: "flex", alignItems: "center"}}><Clock size={18} style={{marginRight: "8px"}} /> Bitácora Histórica</h3>
                   <div style={{display: "flex", flexDirection: "column", gap: "12px"}}>
                     {filteredLoans.length === 0 ? <p style={{color: "#64748b", textAlign: "center"}}>No hay registros de préstamos.</p> : 
                       filteredLoans.map((loan) => {
@@ -1529,10 +1700,10 @@ function App() {
                         const workerLabel = targetWorker ? `${targetWorker.last_name}, ${targetWorker.first_name}` : `Expediente ID: ${loan.patient_id}`;
 
                         return (
-                          <div key={loan.id} style={{backgroundColor: "#0f172a", padding: "15px", borderRadius: "8px", borderLeft: `4px solid ${lColor.border}`, display: "flex", justifyContent: "space-between", alignItems: "center"}}>
+                          <div key={loan.id} style={{backgroundColor: "var(--bg-app)", padding: "15px", borderRadius: "8px", borderLeft: `4px solid ${lColor.border}`, display: "flex", justifyContent: "space-between", alignItems: "center"}}>
                             <div>
-                              <strong style={{color: "#fff", display: "block", fontSize: "14px"}}>{loan.borrower_name}</strong>
-                              <span style={{color: "#94a3b8", fontSize: "13px"}}>Expediente: {workerLabel} | Retorno: {loan.expected_return_date}</span>
+                              <strong style={{color: "var(--text-main)", display: "block", fontSize: "14px"}}>{loan.borrower_name}</strong>
+                              <span style={{color: "var(--text-sub)", fontSize: "13px"}}>Expediente: {workerLabel} | Retorno: {loan.expected_return_date}</span>
                             </div>
                             <div style={{display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "8px"}}>
                                <span style={{backgroundColor: lColor.bg, color: lColor.color, padding: "4px 8px", borderRadius: "4px", fontSize: "11px", fontWeight: "bold"}}>{lColor.label}</span>
@@ -1540,7 +1711,7 @@ function App() {
                                  {loan.status === "ACTIVO" && (
                                    <button onClick={() => handleReturnLoan(loan.id)} style={styles.btnActionSecondary} className="btn-interactive btn-info">Devolución</button>
                                  )}
-                                 {user.role === "ADMIN" && (
+                                 {user?.role === "ADMIN" && (
                                    <button onClick={() => handleDeleteLoan(loan.id)} style={styles.btnActionIcon} className="btn-interactive btn-danger" title="Eliminar Registro"><Trash2 size={14} /></button>
                                  )}
                                </div>
@@ -1558,21 +1729,21 @@ function App() {
             {activeTab === "calendar" && (
               <div style={{display: "flex", flexDirection: "column", gap: "25px"}}>
                 <div style={{display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "15px"}}>
-                  <div style={{backgroundColor: "#0f172a", padding: "15px", borderRadius: "12px", borderTop: "4px solid #ef4444"}}>
-                    <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", color: "#94a3b8", fontSize: "13px"}}><span>Vencidos</span><ShieldAlert size={16} color="#ef4444"/></div>
-                    <h3 style={{margin: "5px 0 0 0", color: "#fff", fontSize: "28px"}}>{overdueAlerts.length}</h3>
+                  <div style={{backgroundColor: "var(--bg-app)", padding: "15px", borderRadius: "12px", borderTop: "4px solid #ef4444"}}>
+                    <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", color: "var(--text-sub)", fontSize: "13px"}}><span>Vencidos</span><ShieldAlert size={16} color="#ef4444"/></div>
+                    <h3 style={{margin: "5px 0 0 0", color: "var(--text-main)", fontSize: "28px"}}>{overdueAlerts.length}</h3>
                   </div>
-                  <div style={{backgroundColor: "#0f172a", padding: "15px", borderRadius: "12px", borderTop: "4px solid #f59e0b"}}>
-                    <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", color: "#94a3b8", fontSize: "13px"}}><span>Por Vencer</span><Clock size={16} color="#f59e0b"/></div>
-                    <h3 style={{margin: "5px 0 0 0", color: "#fff", fontSize: "28px"}}>{dueSoonAlerts.length}</h3>
+                  <div style={{backgroundColor: "var(--bg-app)", padding: "15px", borderRadius: "12px", borderTop: "4px solid #f59e0b"}}>
+                    <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", color: "var(--text-sub)", fontSize: "13px"}}><span>Por Vencer</span><Clock size={16} color="#f59e0b"/></div>
+                    <h3 style={{margin: "5px 0 0 0", color: "var(--text-main)", fontSize: "28px"}}>{dueSoonAlerts.length}</h3>
                   </div>
-                  <div style={{backgroundColor: "#0f172a", padding: "15px", borderRadius: "12px", borderTop: "4px solid #64748b"}}>
-                    <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", color: "#94a3b8", fontSize: "13px"}}><span>Expurgos</span><FileText size={16} color="#64748b"/></div>
-                    <h3 style={{margin: "5px 0 0 0", color: "#fff", fontSize: "28px"}}>{expurgoAlerts.length}</h3>
+                  <div style={{backgroundColor: "var(--bg-app)", padding: "15px", borderRadius: "12px", borderTop: "4px solid #64748b"}}>
+                    <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", color: "var(--text-sub)", fontSize: "13px"}}><span>Expurgos</span><FileText size={16} color="#64748b"/></div>
+                    <h3 style={{margin: "5px 0 0 0", color: "var(--text-main)", fontSize: "28px"}}>{expurgoAlerts.length}</h3>
                   </div>
                 </div>
 
-                <div style={{display: "flex", gap: "10px", backgroundColor: "#0f172a", padding: "12px 20px", borderRadius: "10px", border: "1px solid #334155"}}>
+                <div style={{display: "flex", gap: "10px", backgroundColor: "var(--bg-app)", padding: "12px 20px", borderRadius: "10px", border: "1px solid var(--border-color)"}}>
                   <div style={{display: "flex", alignItems: "center", gap: "8px", fontSize: "14px"}}><Search size={16} color="#0d9488"/> Filtros:</div>
                   <select value={alertTypeFilter} onChange={e=>setAlertTypeFilter(e.target.value)} style={{...styles.formInput, width: "180px", padding: "6px"}} className="input-interactive">
                     <option value="TODAS">Todos los tipos</option>
@@ -1590,15 +1761,15 @@ function App() {
 
                 <div style={{display: "flex", flexDirection: "column", gap: "15px", maxHeight: "400px", overflowY: "auto", paddingRight: "5px"}}>
                   {filteredAlerts.length === 0 ? (
-                    <div style={{...styles.placeholderBox, borderStyle: "solid"}}><CheckCircle size={36} color="#10b981"/><p style={{marginTop: "10px", color: "#94a3b8"}}>No hay alertas pendientes para los criterios seleccionados.</p></div>
+                    <div style={{...styles.placeholderBox, borderStyle: "solid"}}><CheckCircle size={36} color="#10b981"/><p style={{marginTop: "10px", color: "var(--text-sub)"}}>No hay alertas pendientes para los criterios seleccionados.</p></div>
                   ) : (
                     filteredAlerts.map(alert => (
-                      <div key={alert.id} style={{backgroundColor: "#0f172a", borderLeft: `5px solid ${alert.border}`, padding: "20px", borderRadius: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 4px 6px rgba(0,0,0,0.15)"}}>
+                      <div key={alert.id} style={{backgroundColor: "var(--bg-app)", borderLeft: `5px solid ${alert.border}`, padding: "20px", borderRadius: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 4px 6px rgba(0,0,0,0.15)"}}>
                         <div style={{display: "flex", gap: "15px", alignItems: "start"}}>
                           <div style={{marginTop: "2px"}}>{alert.icon}</div>
                           <div>
                             <div style={{display: "flex", alignItems: "center", gap: "10px"}}>
-                              <h4 style={{margin: 0, color: "#fff", fontSize: "15px"}}>{alert.title}</h4>
+                              <h4 style={{margin: 0, color: "var(--text-main)", fontSize: "15px"}}>{alert.title}</h4>
                               <span style={{backgroundColor: alert.priority === "ALTA" ? "rgba(239,68,68,0.2)" : alert.priority === "MEDIA" ? "rgba(245,158,11,0.2)" : "rgba(100,116,139,0.2)", color: alert.color, fontSize: "10px", fontWeight: "bold", padding: "2px 8px", borderRadius: "10px"}}>Prioridad {alert.priority}</span>
                             </div>
                             <p style={{margin: "6px 0 0 0", color: "#cbd5e1", fontSize: "14px"}}>{alert.desc}</p>
@@ -1617,10 +1788,10 @@ function App() {
             {activeTab === "stats" && (
               <div style={{display: "flex", flexDirection: "column", gap: "20px"}}>
                 <div style={{display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "15px"}}>
-                  <div style={{backgroundColor: "#0f172a", padding: "20px", borderRadius: "12px", borderTop: "4px solid #0d9488"}}><p style={{margin: 0, color: "#94a3b8", fontSize: "13px", fontWeight: "bold"}}>Total Expedientes</p><h2 style={{margin: "5px 0 0 0", color: "#fff", fontSize: "32px"}}>{statsData.total}</h2></div>
-                  <div style={{backgroundColor: "#0f172a", padding: "20px", borderRadius: "12px", borderTop: "4px solid #3b82f6"}}><p style={{margin: 0, color: "#94a3b8", fontSize: "13px", fontWeight: "bold"}}>Personal Activo</p><h2 style={{margin: "5px 0 0 0", color: "#3b82f6", fontSize: "32px"}}>{statsData.activos}</h2></div>
-                  <div style={{backgroundColor: "#0f172a", padding: "20px", borderRadius: "12px", borderTop: "4px solid #8b5cf6"}}><p style={{margin: 0, color: "#94a3b8", fontSize: "13px", fontWeight: "bold"}}>Egresados</p><h2 style={{margin: "5px 0 0 0", color: "#8b5cf6", fontSize: "32px"}}>{statsData.egresados}</h2></div>
-                  <div style={{backgroundColor: "#0f172a", padding: "20px", borderRadius: "12px", borderTop: "4px solid #f43f5e"}}><p style={{margin: 0, color: "#94a3b8", fontSize: "13px", fontWeight: "bold"}}>Seguro Social / Jub.</p><h2 style={{margin: "5px 0 0 0", color: "#f43f5e", fontSize: "32px"}}>{statsData.seguroSocial + statsData.jubilados}</h2></div>
+                  <div style={{backgroundColor: "var(--bg-app)", padding: "20px", borderRadius: "12px", borderTop: "4px solid #0d9488"}}><p style={{margin: 0, color: "var(--text-sub)", fontSize: "13px", fontWeight: "bold"}}>Total Expedientes</p><h2 style={{margin: "5px 0 0 0", color: "var(--text-main)", fontSize: "32px"}}>{statsData.total}</h2></div>
+                  <div style={{backgroundColor: "var(--bg-app)", padding: "20px", borderRadius: "12px", borderTop: "4px solid #3b82f6"}}><p style={{margin: 0, color: "var(--text-sub)", fontSize: "13px", fontWeight: "bold"}}>Personal Activo</p><h2 style={{margin: "5px 0 0 0", color: "#3b82f6", fontSize: "32px"}}>{statsData.activos}</h2></div>
+                  <div style={{backgroundColor: "var(--bg-app)", padding: "20px", borderRadius: "12px", borderTop: "4px solid #8b5cf6"}}><p style={{margin: 0, color: "var(--text-sub)", fontSize: "13px", fontWeight: "bold"}}>Egresados</p><h2 style={{margin: "5px 0 0 0", color: "#8b5cf6", fontSize: "32px"}}>{statsData.egresados}</h2></div>
+                  <div style={{backgroundColor: "var(--bg-app)", padding: "20px", borderRadius: "12px", borderTop: "4px solid #f43f5e"}}><p style={{margin: 0, color: "var(--text-sub)", fontSize: "13px", fontWeight: "bold"}}>Seguro Social / Jub.</p><h2 style={{margin: "5px 0 0 0", color: "#f43f5e", fontSize: "32px"}}>{statsData.seguroSocial + statsData.jubilados}</h2></div>
                 </div>
                 
                 {/* GRÁFICOS CIRCULARES SVG PURO */}
@@ -1632,11 +1803,11 @@ function App() {
             )}
 
             {/* PESTAÑA 5: CONFIGURACIÓN (Solo ADMIN) */}
-            {activeTab === "settings" && user.role === "ADMIN" && (
-              <div style={{backgroundColor: "#0f172a", borderRadius: "16px", padding: "40px", display: "flex", flexDirection: "column", alignItems: "center", border: "1px dashed #334155"}}>
+            {activeTab === "settings" && user?.role === "ADMIN" && (
+              <div style={{backgroundColor: "var(--bg-app)", borderRadius: "16px", padding: "40px", display: "flex", flexDirection: "column", alignItems: "center", border: "1px dashed var(--border-color)"}}>
                 <Settings size={48} color="#64748b" style={{marginBottom: "15px"}} />
-                <h2 style={{color: "#fff", margin: "0 0 10px 0"}}>Panel Administrativo</h2>
-                <p style={{color: "#94a3b8", maxWidth: "500px", textAlign: "center"}}>Gestiona los permisos de los transcriptores y personal de consulta.</p>
+                <h2 style={{color: "var(--text-main)", margin: "0 0 10px 0"}}>Panel Administrativo</h2>
+                <p style={{color: "var(--text-sub)", maxWidth: "500px", textAlign: "center"}}>Gestiona los permisos de los transcriptores y personal de consulta.</p>
                 <button onClick={handleOpenUserModal} style={{...styles.btnPrimary, width: "250px", marginTop: "20px", display: "flex", justifyContent: "center", gap: "10px"}} className="btn-interactive"><Users size={18}/> Administrar Usuarios</button>
               </div>
             )}
@@ -1648,7 +1819,7 @@ function App() {
                   <Bot size={32} color="#0d9488" />
                   <div>
                     <h3 style={{margin: 0}}>Asistente de Gestión de Archivo SAD-TH</h3>
-                    <p style={{margin: "3px 0 0 0", color: "#94a3b8", fontSize: "14px"}}>Consultor experto en organización e interpretación de leyes laborales.</p>
+                    <p style={{margin: "3px 0 0 0", color: "var(--text-sub)", fontSize: "14px"}}>Consultor experto en organización e interpretación de leyes laborales.</p>
                   </div>
                 </div>
                 <div style={styles.chatWrapper}>
@@ -1683,38 +1854,38 @@ function App() {
 
 // === ESTILOS CSS IN-JS ===
 const styles = {
-  appContainer: { fontFamily: "'Inter', sans-serif", backgroundColor: "#0f172a", color: "#f1f5f9", minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", padding: "20px", boxSizing: "border-box" },
+  appContainer: { fontFamily: "'Inter', sans-serif", backgroundColor: "var(--bg-app)", color: "var(--text-main)", minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", padding: "20px", boxSizing: "border-box" },
   loginWrapper: { display: "flex", alignItems: "center", justifyContent: "center", flex: 1, width: "100%", maxWidth: "400px" },
-  loginCard: { backgroundColor: "#1e293b", padding: "40px 30px", borderRadius: "16px", width: "100%", display: "flex", flexDirection: "column", gap: "20px" },
+  loginCard: { backgroundColor: "var(--bg-card)", padding: "40px 30px", borderRadius: "16px", width: "100%", display: "flex", flexDirection: "column", gap: "20px" },
   loginHeader: { textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: "10px" },
-  logoIconBg: { backgroundColor: "#0f172a", padding: "12px", borderRadius: "50%", display: "flex" },
-  loginTitle: { margin: 0, fontSize: "28px", fontWeight: "900", color: "#fff" },
-  loginSubtitle: { margin: 0, fontSize: "12px", color: "#94a3b8" },
+  logoIconBg: { backgroundColor: "var(--bg-app)", padding: "12px", borderRadius: "50%", display: "flex" },
+  loginTitle: { margin: 0, fontSize: "28px", fontWeight: "900", color: "var(--text-main)" },
+  loginSubtitle: { margin: 0, fontSize: "12px", color: "var(--text-sub)" },
   inputGroup: { display: "flex", flexDirection: "column", gap: "6px" },
-  inputLabel: { fontSize: "13px", color: "#94a3b8", fontWeight: "600" },
-  formInput: { width: "100%", padding: "12px", borderRadius: "8px", border: "1px solid #334155", backgroundColor: "#0f172a", color: "#fff", boxSizing: "border-box", fontSize: "14px" },
+  inputLabel: { fontSize: "13px", color: "var(--text-sub)", fontWeight: "600" },
+  formInput: { width: "100%", padding: "12px", borderRadius: "8px", border: "1px solid var(--border-color)", backgroundColor: "var(--bg-input)", color: "var(--text-main)", boxSizing: "border-box", fontSize: "14px" },
   btnPrimary: { width: "100%", padding: "12px", backgroundColor: "#0d9488", color: "#fff", border: "none", borderRadius: "8px", fontSize: "15px", fontWeight: "bold", cursor: "pointer" },
   
-  dashboardContainer: { width: "100%", maxWidth: "1150px", backgroundColor: "#1e293b", borderRadius: "16px", padding: "25px", boxSizing: "border-box", boxShadow: "0 10px 30px rgba(0,0,0,0.5)", position: "relative" },
-  header: { display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #334155", paddingBottom: "20px", marginBottom: "20px" },
+  dashboardContainer: { width: "100%", maxWidth: "1150px", backgroundColor: "var(--bg-card)", borderRadius: "16px", padding: "25px", boxSizing: "border-box", boxShadow: "0 10px 30px rgba(0,0,0,0.5)", position: "relative" },
+  header: { display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border-color)", paddingBottom: "20px", marginBottom: "20px" },
   brand: { display: "flex", alignItems: "center", gap: "10px" },
-  brandText: { fontSize: "18px", fontWeight: "800", color: "#fff" },
+  brandText: { fontSize: "18px", fontWeight: "800", color: "var(--text-main)" },
   userInfo: { display: "flex", alignItems: "center", gap: "12px" },
-  avatar: { backgroundColor: "#0f172a", padding: "8px", borderRadius: "50%" },
+  avatar: { backgroundColor: "var(--bg-app)", padding: "8px", borderRadius: "50%" },
   userDetail: { display: "flex", flexDirection: "column" },
   userName: { fontSize: "13px", fontWeight: "bold" },
   userRoleBadge: { fontSize: "10px", backgroundColor: "#0369a1", padding: "2px 6px", borderRadius: "4px", color: "#fff", fontWeight: "bold" },
-  btnLogout: { backgroundColor: "transparent", border: "none", color: "#94a3b8", cursor: "pointer", padding: "6px" },
+  btnLogout: { backgroundColor: "transparent", border: "none", color: "var(--text-sub)", cursor: "pointer", padding: "6px" },
 
-  tabBar: { display: "flex", gap: "5px", flexWrap: "wrap", borderBottom: "1px solid #334155", marginBottom: "20px" },
+  tabBar: { display: "flex", gap: "5px", flexWrap: "wrap", borderBottom: "1px solid var(--border-color)", marginBottom: "20px" },
   tabLink: { backgroundColor: "transparent", border: "none", fontSize: "14px", fontWeight: "600", cursor: "pointer", display: "flex", alignItems: "center" },
 
   splitLayout: { display: "grid", gridTemplateColumns: "35fr 65fr", gap: "25px", alignItems: "start", width: "100%" },
   leftCol: { display: "flex", flexDirection: "column" },
   rightCol: { display: "flex", flexDirection: "column", width: "100%", minWidth: 0 }, 
   
-  sectionTitle: { margin: "0 0 15px 0", fontSize: "16px", color: "#fff", display: "flex", alignItems: "center" },
-  medicalForm: { backgroundColor: "#0f172a", padding: "20px", borderRadius: "12px", display: "flex", flexDirection: "column", gap: "12px" },
+  sectionTitle: { margin: "0 0 15px 0", fontSize: "16px", color: "var(--text-main)", display: "flex", alignItems: "center" },
+  medicalForm: { backgroundColor: "var(--bg-app)", padding: "20px", borderRadius: "12px", display: "flex", flexDirection: "column", gap: "12px" },
   grid2Col: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" },
   inputWithIcon: { position: "relative", width: "100%" },
   innerIcon: { position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#64748b" },
@@ -1727,38 +1898,38 @@ const styles = {
   btnLoadRecords: { display: "flex", alignItems: "center", padding: "6px 12px", backgroundColor: "#0d9488", color: "#fff", border: "none", borderRadius: "6px", fontSize: "13px", fontWeight: "bold", cursor: "pointer" },
   searchBarWrapper: { position: "relative", width: "100%" },
   searchIcon: { position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#64748b" },
-  searchInputField: { width: "100%", padding: "10px 10px 10px 35px", borderRadius: "8px", border: "1px solid #334155", backgroundColor: "#0f172a", color: "#fff", fontSize: "13.5px", boxSizing: "border-box" },
+  searchInputField: { width: "100%", padding: "10px 10px 10px 35px", borderRadius: "8px", border: "1px solid var(--border-color)", backgroundColor: "var(--bg-input)", color: "var(--text-main)", fontSize: "13.5px", boxSizing: "border-box" },
 
   patientsFeed: { display: "flex", flexDirection: "column", gap: "12px", maxHeight: "540px", overflowY: "auto", paddingRight: "5px" },
-  placeholderBox: { display: "flex", flexDirection: "column", alignItems: "center", padding: "40px 20px", border: "1px dashed #334155", borderRadius: "12px", backgroundColor: "#0f172a" },
-  medicalCard: { backgroundColor: "#0f172a", padding: "18px", borderRadius: "12px" },
+  placeholderBox: { display: "flex", flexDirection: "column", alignItems: "center", padding: "40px 20px", border: "1px dashed var(--border-color)", borderRadius: "12px", backgroundColor: "var(--bg-app)" },
+  medicalCard: { backgroundColor: "var(--bg-app)", padding: "18px", borderRadius: "12px" },
   cardHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" },
-  patientName: { margin: 0, fontSize: "16px", color: "#fff", fontWeight: "bold" },
+  patientName: { margin: 0, fontSize: "16px", color: "var(--text-main)", fontWeight: "bold" },
   patientIdBadge: { fontSize: "11px", padding: "2px 8px", borderRadius: "12px", color: "#fff", fontWeight: "bold" },
   cardDetails: { display: "flex", flexDirection: "column", gap: "6px" },
-  detailRow: { display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", color: "#94a3b8" },
-  historyBox: { backgroundColor: "#1e293b", padding: "10px", borderRadius: "6px", marginTop: "8px" },
+  detailRow: { display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", color: "var(--text-sub)" },
+  historyBox: { backgroundColor: "var(--bg-card)", padding: "10px", borderRadius: "6px", marginTop: "8px" },
   
-  cardActionsBar: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "15px", paddingTop: "12px", borderTop: "1px solid #1e293b" },
+  cardActionsBar: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "15px", paddingTop: "12px", borderTop: "1px solid var(--border-color)" },
   btnActionSecondary: { display: "flex", alignItems: "center", gap: "6px", padding: "6px 10px", backgroundColor: "#334155", color: "#fff", border: "none", borderRadius: "6px", fontSize: "12px", cursor: "pointer" },
   btnActionIcon: { padding: "6px", backgroundColor: "#334155", color: "#94a3b8", border: "none", borderRadius: "6px", cursor: "pointer", display: "flex" },
 
   modalOverlay: { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.75)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 9999, backdropFilter: "blur(4px)" },
   alertSuccess: { backgroundColor: "rgba(16, 185, 129, 0.15)", border: "1px solid #10b981", color: "#6ee7b7", padding: "10px 15px", borderRadius: "8px", fontSize: "13px", fontWeight: "bold", marginBottom: "10px" },
-  modalContent: { backgroundColor: "#1e293b", padding: "25px", borderRadius: "16px", width: "90%", maxWidth: "550px", border: "1px solid #334155", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.6)", display: "flex", flexDirection: "column", gap: "15px" },
-  modalHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #334155", paddingBottom: "15px" },
-  modalTitle: { margin: 0, color: "#fff", fontSize: "18px", fontWeight: "bold" },
-  uploadBox: { display: "flex", flexDirection: "column", gap: "12px", backgroundColor: "#0f172a", padding: "18px", borderRadius: "12px", border: "1px dashed #3b82f6" },
+  modalContent: { backgroundColor: "var(--bg-card)", padding: "25px", borderRadius: "16px", width: "90%", maxWidth: "550px", border: "1px solid var(--border-color)", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.6)", display: "flex", flexDirection: "column", gap: "15px" },
+  modalHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border-color)", paddingBottom: "15px" },
+  modalTitle: { margin: 0, color: "var(--text-main)", fontSize: "18px", fontWeight: "bold" },
+  uploadBox: { display: "flex", flexDirection: "column", gap: "12px", backgroundColor: "var(--bg-app)", padding: "18px", borderRadius: "12px", border: "1px dashed #3b82f6" },
   docList: { display: "flex", flexDirection: "column", gap: "10px", maxHeight: "220px", overflowY: "auto", paddingRight: "5px" },
-  docItem: { display: "flex", justifyContent: "space-between", alignItems: "center", backgroundColor: "#0f172a", padding: "12px", borderRadius: "8px", borderLeft: "4px solid #3b82f6" },
+  docItem: { display: "flex", justifyContent: "space-between", alignItems: "center", backgroundColor: "var(--bg-app)", padding: "12px", borderRadius: "8px", borderLeft: "4px solid #3b82f6" },
   btnDocLink: { display: "flex", alignItems: "center", gap: "6px", padding: "6px 12px", backgroundColor: "#0ea5e9", color: "#fff", textDecoration: "none", borderRadius: "6px", fontSize: "12px", fontWeight: "bold" },
 
   aiContainer: { display: "flex", flexDirection: "column", gap: "20px" },
-  aiHeader: { display: "flex", alignItems: "center", gap: "15px", backgroundColor: "#0f172a", padding: "15px", borderRadius: "12px" },
-  chatWrapper: { height: "350px", backgroundColor: "#0f172a", borderRadius: "12px", padding: "20px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "15px" },
+  aiHeader: { display: "flex", alignItems: "center", gap: "15px", backgroundColor: "var(--bg-app)", padding: "15px", borderRadius: "12px" },
+  chatWrapper: { height: "350px", backgroundColor: "var(--bg-app)", borderRadius: "12px", padding: "20px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "15px" },
   chatBubble: { maxWidth: "75%", padding: "12px 16px", borderRadius: "12px", color: "#fff" },
   chatForm: { display: "flex", gap: "10px" },
-  chatInput: { flex: 1, padding: "14px", backgroundColor: "#0f172a", color: "#fff", border: "1px solid #334155", borderRadius: "8px" },
+  chatInput: { flex: 1, padding: "14px", backgroundColor: "var(--bg-input)", color: "var(--text-main)", border: "1px solid var(--border-color)", borderRadius: "8px" },
   chatSubmitBtn: { backgroundColor: "#0d9488", color: "#fff", border: "none", borderRadius: "8px", padding: "0 20px", cursor: "pointer" }
 };
 
